@@ -2,7 +2,7 @@
   let dashboardState = null;
   let lastFetchClientTime = Date.now();
   let selectedRangeMinutes = 60;
-  let mapViewMode = 'world'; // 'world' | 'europe'
+  let mapViewMode = 'europe'; // 'europe' | 'romania' | 'world'
   let geoTabMode = 'countries'; // 'countries' | 'cities'
   let rightMidTabMode = 'retention'; // 'retention' | 'events'
   let tableSearchQuery = '';
@@ -41,6 +41,23 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  function isoToFlagEmoji(cc) {
+    const code = String(cc || '').trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code) || code === 'UN' || code === 'XX' || code === 'LO') return '🌐';
+    return String.fromCodePoint(...code.split('').map(c => 127397 + c.charCodeAt(0)));
+  }
+
+  function renderCountryFlag(cc, countryName = '', size = 18) {
+    const code = String(cc || '').trim().toLowerCase();
+    const emoji = isoToFlagEmoji(cc);
+    const titleAttr = escapeHtml(countryName ? `${countryName} (${code.toUpperCase()})` : code.toUpperCase());
+    if (!/^[a-z]{2}$/.test(code) || code === 'un' || code === 'xx' || code === 'lo') {
+      return `<span class="country-flag-badge" title="${titleAttr}" style="font-size:${size - 2}px;line-height:1">${emoji}</span>`;
+    }
+    const h = Math.round(size * 0.75);
+    return `<img class="country-flag-img" src="https://flagcdn.com/24x18/${code}.png" srcset="https://flagcdn.com/48x36/${code}.png 2x" width="${size}" height="${h}" alt="${emoji}" title="${titleAttr}" loading="lazy" style="border-radius:2px;vertical-align:middle;object-fit:cover;box-shadow:0 0 0 1px rgba(255,255,255,0.16);flex-shrink:0" onerror="this.replaceWith(document.createTextNode('${emoji}'))" />`;
   }
 
   function showToast(message) {
@@ -150,8 +167,8 @@
 
     document.getElementById('kpiCountriesCount').textContent = breakdowns.countries.length;
     const topCountry = breakdowns.countries[0];
-    document.getElementById('kpiTopCountryBadge').textContent = topCountry
-      ? `Top: ${topCountry.countryCode} (${topCountry.sharePct}%)`
+    document.getElementById('kpiTopCountryBadge').innerHTML = topCountry
+      ? `<span style="display:inline-flex;align-items:center;gap:5px">Top: ${renderCountryFlag(topCountry.countryCode, topCountry.countryName, 15)} ${escapeHtml(topCountry.countryName)} (${topCountry.sharePct}%)</span>`
       : 'Top: --';
     document.getElementById('kpiDupConnectionsTag').textContent = `${kpis.duplicateConnections} multi-stream`;
     document.getElementById('kpi24hUniqueIps').textContent = kpis.uniqueIps24h;
@@ -318,6 +335,10 @@
         const statusBadge = item.isActive
           ? `<span class="event-badge join">LIVE NOW</span>`
           : `<span class="event-badge leave">RECENT</span>`;
+        const locLabel =
+          item.city && item.city !== item.countryName && item.city !== 'Unknown City'
+            ? `${escapeHtml(item.city)}, <span style="color:var(--text-secondary)">${escapeHtml(item.countryName || item.countryCode)}</span>`
+            : escapeHtml(item.countryName || item.city || item.countryCode);
         return `
           <div class="event-row" style="padding:10px 12px">
             <div style="display:flex;align-items:center;gap:10px;min-width:0">
@@ -327,8 +348,8 @@
                   <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(item.ip)}" onclick="document.querySelector('[data-inspect-ip=\\'${escapeHtml(item.ip)}\\']')?.click()">
                     ${escapeHtml(item.ip)}
                   </button>
-                  <span class="country-code-pill">${escapeHtml(item.countryCode)}</span>
-                  <span style="font-weight:500">${escapeHtml(item.city)}</span>
+                  ${renderCountryFlag(item.countryCode, item.countryName, 18)}
+                  <span style="font-weight:500">${locLabel}</span>
                   ${statusBadge}
                 </div>
                 <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">
@@ -360,8 +381,8 @@
       .map(item => {
         const label =
           geoTabMode === 'countries'
-            ? `<span class="country-code-pill">${escapeHtml(item.countryCode)}</span><span>${escapeHtml(item.countryName)}</span>`
-            : `<span class="country-code-pill">${escapeHtml(item.countryCode)}</span><span>${escapeHtml(item.city)}</span>`;
+            ? `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span>${escapeHtml(item.countryName)}</span>`
+            : `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span>${escapeHtml(item.city)}</span>`;
         return `
           <div class="dist-item">
             <div class="dist-item-header">
@@ -685,8 +706,8 @@
               </div>
             </td>
             <td>
-              <div style="display:flex;align-items:center;gap:7px">
-                <span class="country-code-pill">${escapeHtml(r.geo?.countryCode || 'UN')}</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${renderCountryFlag(r.geo?.countryCode, r.geo?.countryName, 18)}
                 <span>${
                   r.geo?.city && r.geo.city !== r.geo.countryName && r.geo.city !== 'Unknown City'
                     ? `${escapeHtml(r.geo.city)}, <span style="color:var(--text-secondary)">${escapeHtml(r.geo?.countryName || '')}</span>`
@@ -766,7 +787,7 @@
         <div class="form-grid-2" style="background:var(--bg-canvas);padding:12px 14px;border-radius:8px;border:1px solid var(--border-subtle)">
           <div>
             <div style="font-size:11px;color:var(--text-muted)">LOCATION</div>
-            <div style="font-weight:600;margin-top:2px">${escapeHtml(geo.city)}, ${escapeHtml(geo.countryName)} (${escapeHtml(geo.countryCode)})</div>
+            <div style="font-weight:600;margin-top:2px;display:flex;align-items:center;gap:6px">${renderCountryFlag(geo.countryCode, geo.countryName, 18)} <span>${escapeHtml(geo.city && geo.city !== geo.countryName ? `${geo.city}, ${geo.countryName}` : geo.countryName)}</span></div>
             <div class="mono" style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">Coords: ${geo.lat}, ${geo.lon} • TZ: ${escapeHtml(geo.timezone)}</div>
           </div>
           <div>
@@ -809,18 +830,16 @@
 
   // Event Listeners Setup
   function setupInteractions() {
-    // Map View Tabs
-    document.getElementById('mapViewWorldBtn')?.addEventListener('click', e => {
-      mapViewMode = 'world';
-      e.currentTarget.classList.add('active');
-      document.getElementById('mapViewEuropeBtn')?.classList.remove('active');
-      renderAll();
-    });
-    document.getElementById('mapViewEuropeBtn')?.addEventListener('click', e => {
-      mapViewMode = 'europe';
-      e.currentTarget.classList.add('active');
-      document.getElementById('mapViewWorldBtn')?.classList.remove('active');
-      renderAll();
+    // Map View Tabs ('europe' | 'romania' | 'world')
+    ['mapViewEuropeBtn', 'mapViewRomaniaBtn', 'mapViewWorldBtn'].forEach(btnId => {
+      document.getElementById(btnId)?.addEventListener('click', e => {
+        const mode = e.currentTarget.getAttribute('data-map-view') || 'europe';
+        mapViewMode = mode;
+        ['mapViewEuropeBtn', 'mapViewRomaniaBtn', 'mapViewWorldBtn'].forEach(id => {
+          document.getElementById(id)?.classList.toggle('active', id === btnId);
+        });
+        renderAll();
+      });
     });
 
     // Geo Breakdown Tabs

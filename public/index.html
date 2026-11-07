@@ -195,8 +195,9 @@
             <div class="panel-subtitle">Real-time MaxMind GeoIP coordinate clustering across active connections</div>
           </div>
           <div class="segmented-tabs" role="tablist" aria-label="Map region focus">
-            <button class="seg-btn active" data-map-view="world" id="mapViewWorldBtn">World View</button>
-            <button class="seg-btn" data-map-view="europe" id="mapViewEuropeBtn">Europe Focus</button>
+            <button class="seg-btn active" data-map-view="europe" id="mapViewEuropeBtn">Europe Focus</button>
+            <button class="seg-btn" data-map-view="romania" id="mapViewRomaniaBtn">Romania</button>
+            <button class="seg-btn" data-map-view="world" id="mapViewWorldBtn">World View</button>
           </div>
         </div>
         <div class="panel-body">
@@ -204,7 +205,7 @@
             <svg id="worldMapSvg" class="world-map-svg" preserveAspectRatio="xMidYMid meet"></svg>
             <div id="mapTooltip" class="map-tooltip hidden"></div>
             <div class="map-legend">
-              <span><strong style="color:var(--accent-amber)">●</strong> Active Listener Cluster (hover or click pin to inspect IP)</span>
+              <span><strong style="color:var(--accent-amber)">●</strong> Active Listener Cluster (scroll to zoom, drag to pan, click pin to inspect IP)</span>
             </div>
           </div>
         </div>
