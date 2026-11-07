@@ -59,7 +59,7 @@ app.use((req, res, next) => {
     }
   }
 
-  res.setHeader('WWW-Authenticate', 'Basic realm="OzoneCast Studio — OZONE.FM Admin", charset="UTF-8"');
+  res.setHeader('WWW-Authenticate', 'Basic realm="OzoneCast Studio - OZONE.FM Admin"');
   return res.status(401).send('Authentication required: Enter your Icecast Admin username and password.');
 });
 
