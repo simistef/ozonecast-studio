@@ -1,0 +1,11 @@
+node_modules/
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+.gemini/
+.bash_history
+.bashrc
+.bash_logout
+.profile
+.gitconfig
+npm-debug.log*

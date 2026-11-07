@@ -1,0 +1,24 @@
+services:
+  ozonecast:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ozonecast-studio
+    restart: unless-stopped
+    ports:
+      - "3080:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TZ=Europe/Bucharest
+      - ICECAST_URL=https://live.ozone.fm:8443
+      - ICECAST_MOUNT=/listen
+      - ICECAST_USER=admin
+      - ICECAST_PASS=Wo10vn57zomq?
+      - POLL_INTERVAL_SEC=10
+      - IGNORE_TLS_ERRORS=true
+      - SOURCE_MODE=live
+      - STATION_NAME=OZONE.FM
+      - MAX_LISTENERS=500
+    volumes:
+      - ./data:/app/data

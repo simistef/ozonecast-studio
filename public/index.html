@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OzoneCast Studio — Icecast Real-Time Listener Telemetry &amp; Analytics</title>
+  <meta name="description" content="Broadcast-grade real-time Icecast listener analytics, GeoIP world map, User-Agent client telemetry, and historical session monitoring for live.ozone.fm:8443." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/index.css" />
+</head>
+<body>
+  <!-- Top Broadcast Telemetry Bar -->
+  <header class="topbar" role="banner">
+    <div class="brand-cluster">
+      <div class="station-emblem" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+          <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path>
+          <circle cx="12" cy="12" r="2"></circle>
+          <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path>
+          <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
+        </svg>
+      </div>
+      <div class="brand-titles">
+        <h1>
+          <span id="stationNameHeading">OZONE.FM</span>
+          <span id="mountBadge" class="mount-tag">/listen</span>
+        </h1>
+        <div class="brand-subtitle">
+          <span id="endpointHostDisplay" class="mono">live.ozone.fm:8443</span>
+          <span>•</span>
+          <span id="streamFormatSpec" class="mono">320 kbps AAC+</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Built-in Stream Audio Preview & Metadata Ticker -->
+    <div class="stream-monitor" aria-label="Live stream audio monitor">
+      <button id="toggleAudioBtn" class="play-stream-btn" title="Listen to live stream (https://live.ozone.fm:8443/listen)" aria-label="Toggle live audio stream">
+        <svg id="playIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="6 4 20 12 6 20 6 4"></polygon>
+        </svg>
+      </button>
+      <div class="stream-meta-col">
+        <div class="stream-now-playing-label">
+          <span>ON AIR MONITOR</span>
+          <span id="lastUpdatedClock" class="mono">--:--:--</span>
+        </div>
+        <div id="nowPlayingTitle" class="stream-track-title">Connecting to stream metadata...</div>
+      </div>
+      <div id="vuMeterBars" class="vu-bars" aria-hidden="true">
+        <div class="vu-bar"></div>
+        <div class="vu-bar"></div>
+        <div class="vu-bar"></div>
+        <div class="vu-bar"></div>
+        <div class="vu-bar"></div>
+      </div>
+      <audio id="liveStreamAudio" preload="none" crossorigin="anonymous"></audio>
+    </div>
+
+    <!-- Telemetry Controls -->
+    <div class="topbar-actions">
+      <div id="connectionStatusBadge" class="status-badge">
+        <span class="status-dot"></span>
+        <span id="connectionStatusText">Probing Icecast...</span>
+      </div>
+
+      <select id="pollIntervalSelect" class="select-control" aria-label="Polling interval">
+        <option value="5">Poll: 5s</option>
+        <option value="10" selected>Poll: 10s</option>
+        <option value="30">Poll: 30s</option>
+        <option value="60">Poll: 60s</option>
+      </select>
+
+      <button id="manualRefreshBtn" class="btn" title="Poll Icecast endpoint immediately">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Refresh</span>
+      </button>
+
+      <button id="openImportModalBtn" class="btn" title="Paste raw HTML/XML from listclients.xsl">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>Import XSL</span>
+      </button>
+
+      <button id="openSettingsModalBtn" class="btn btn-primary">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span>Icecast Server</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Diagnostic Notice Banner when outbound port 8443 is blocked by sandbox proxy -->
+  <section id="diagnosticBanner" class="diagnostic-banner hidden" aria-live="polite">
+    <div>
+      <strong>Telemetry Feed Note:</strong>
+      <span id="diagnosticMessage"></span>
+    </div>
+    <div class="diagnostic-actions">
+      <button id="retryLiveBtn" class="btn">Retry Live 8443</button>
+      <button id="pasteXslQuickBtn" class="btn">Paste listclients.xsl HTML</button>
+    </div>
+  </section>
+
+  <!-- Main Telemetry Workspace -->
+  <main class="workspace">
+    <!-- 4-Card KPI Strip -->
+    <section class="kpi-grid" aria-label="Key station metrics">
+      <article class="kpi-card">
+        <div class="kpi-header">
+          <span>CONCURRENT LISTENERS</span>
+          <span id="capacityPctBadge" class="kpi-subtag emerald">0% cap</span>
+        </div>
+        <div class="kpi-value-row">
+          <div id="kpiCurrentListeners" class="kpi-number">0</div>
+          <div id="kpiUniqueIpsTag" class="kpi-subtag">0 unique IPs</div>
+        </div>
+        <div>
+          <div class="capacity-meter">
+            <div id="capacityMeterFill" class="capacity-fill" style="width: 0%"></div>
+          </div>
+          <div class="kpi-footer" style="margin-top:6px">
+            <span>Mount: <strong id="kpiMountName" class="mono">/listen</strong></span>
+            <span>Max: <strong id="kpiMaxCapacity" class="mono">500</strong></span>
+          </div>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-header">
+          <span>PEAK LISTENERS (24H)</span>
+          <span id="kpiAllTimePeakBadge" class="kpi-subtag amber">All-Time: 0</span>
+        </div>
+        <div class="kpi-value-row">
+          <div id="kpiPeak24h" class="kpi-number">0</div>
+          <div id="kpiPeakDeltaTag" class="kpi-subtag">Peak Headroom</div>
+        </div>
+        <div class="kpi-footer">
+          <span>Recorded at <strong id="kpiPeakTime" class="mono">--:--</strong></span>
+          <span>SQLite Tracked</span>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-header">
+          <span>AVG TUNE-IN DURATION</span>
+          <span id="kpiLongestTag" class="kpi-subtag cyan">Max: 0m</span>
+        </div>
+        <div class="kpi-value-row">
+          <div id="kpiAvgDuration" class="kpi-number">0m 00s</div>
+          <div id="kpiTlhBadge" class="kpi-subtag emerald">0.0 TLH</div>
+        </div>
+        <div class="kpi-footer">
+          <span>Active TLH: <strong id="kpiActiveTlh" class="mono">0.00 hrs</strong></span>
+          <span>24h Total: <strong id="kpi24hTlh" class="mono">0.00 hrs</strong></span>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-header">
+          <span>GEOGRAPHIC REACH &amp; SESSIONS</span>
+          <span id="kpiDupConnectionsTag" class="kpi-subtag">0 multi-stream IPs</span>
+        </div>
+        <div class="kpi-value-row">
+          <div id="kpiCountriesCount" class="kpi-number">0</div>
+          <div id="kpiTopCountryBadge" class="kpi-subtag amber">Top: --</div>
+        </div>
+        <div class="kpi-footer">
+          <span>24h Unique IPs: <strong id="kpi24hUniqueIps" class="mono">0</strong></span>
+          <span>24h Sessions: <strong id="kpi24hSessions" class="mono">0</strong></span>
+        </div>
+      </article>
+    </section>
+
+    <!-- Row 1: Interactive World Geolocation Map + Country / City Breakdown -->
+    <section class="row-split">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>
+              <span>Live Listener Geolocation Map</span>
+            </h2>
+            <div class="panel-subtitle">Real-time MaxMind GeoIP coordinate clustering across active connections</div>
+          </div>
+          <div class="segmented-tabs" role="tablist" aria-label="Map region focus">
+            <button class="seg-btn active" data-map-view="world" id="mapViewWorldBtn">World View</button>
+            <button class="seg-btn" data-map-view="europe" id="mapViewEuropeBtn">Europe Focus</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="map-viewport">
+            <svg id="worldMapSvg" class="world-map-svg" preserveAspectRatio="xMidYMid meet"></svg>
+            <div id="mapTooltip" class="map-tooltip hidden"></div>
+            <div class="map-legend">
+              <span><strong style="color:var(--accent-amber)">●</strong> Active Listener Cluster (hover or click pin to inspect IP)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Geographic Distribution</h2>
+            <div class="panel-subtitle">Listener share &amp; average session time by location</div>
+          </div>
+          <div class="segmented-tabs" role="tablist">
+            <button class="seg-btn active" id="geoTabCountriesBtn">Countries</button>
+            <button class="seg-btn" id="geoTabCitiesBtn">Cities</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="geoBreakdownList" class="dist-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 2: Historical Listener Trends (SQLite) + Session Duration Histogram / Live Event Feed -->
+    <section class="row-split">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Historical Listener Trend &amp; Peak Curve</h2>
+            <div class="panel-subtitle">Time-series concurrency stored in local SQLite database</div>
+          </div>
+          <div class="segmented-tabs" id="historyRangeTabs">
+            <button class="seg-btn" data-range="15">15m</button>
+            <button class="seg-btn active" data-range="60">1h</button>
+            <button class="seg-btn" data-range="360">6h</button>
+            <button class="seg-btn" data-range="1440">24h</button>
+            <button class="seg-btn" data-range="10080">7d</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-container">
+            <canvas id="historyChartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2 id="rightMidPanelTitle">Listener Retention &amp; Tune-In Duration</h2>
+            <div class="panel-subtitle" id="rightMidPanelSub">Distribution of active listener loyalty cohorts</div>
+          </div>
+          <div class="segmented-tabs">
+            <button class="seg-btn active" id="tabRetentionBtn">Retention</button>
+            <button class="seg-btn" id="tabEventFeedBtn">Join / Leave Log</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="retentionBucketList" class="dist-list"></div>
+          <div id="eventFeedContainer" class="event-feed" style="display:none"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 2.5: 24-Hour Time-of-Day Listener Schedule + Top 5 Returning Listeners Leaderboard -->
+    <section class="row-split" aria-label="Time of day schedule and Top 5 returning listeners">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Time-of-Day Audience Profile (00:00 – 23:00) &amp; Connected Time</h2>
+            <div class="panel-subtitle">When listeners usually tune in across the day (hourly averages &amp; dayparts)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span id="bestHourTag" class="mount-tag">Peak Hour: --:--</span>
+          </div>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+          <div class="chart-container" style="height:185px">
+            <canvas id="timeOfDayCanvas"></canvas>
+          </div>
+          <div id="daypartSummaryGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
+          <div id="connectedTimeStatsStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding-top:8px;border-top:1px solid var(--border-subtle)"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Top 5 Returning Listeners</h2>
+            <div class="panel-subtitle">Most loyal repeat listeners ranked by return sessions &amp; cumulative connected time</div>
+          </div>
+          <span id="returningTotalTag" class="mount-tag">SQLite Tracked</span>
+        </div>
+        <div class="panel-body">
+          <div id="topReturningList" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 3: RadioToolbox / StatCast User-Agent & Platform Telemetry -->
+    <section class="row-tri" aria-label="User-Agent and device telemetry">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Players &amp; Audio Clients</h2>
+            <div class="panel-subtitle">Parsed from Icecast User-Agent headers</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="playersDistList" class="dist-list"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Client Categories</h2>
+            <div class="panel-subtitle">Web Browser vs Native Player vs Smart Speaker</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="categoriesDistList" class="dist-list"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Operating Systems &amp; Devices</h2>
+            <div class="panel-subtitle">Desktop, Mobile, and Embedded Hardware</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="platformsDistList" class="dist-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 4: Full Private Admin Active Clients Table (/admin/listclients.xsl?mount=/listen) -->
+    <section class="panel" aria-label="Connected Icecast clients table">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>
+            <span>Connected Clients — Private Admin Console</span>
+            <span id="tableCountBadge" class="mount-tag">0 clients</span>
+          </h2>
+          <div class="panel-subtitle">
+            Live listener table for <span id="tableEndpointLabel" class="mono">https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen</span>
+          </div>
+        </div>
+
+        <div class="table-toolbar">
+          <div class="search-input-wrap">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="search" id="clientSearchInput" class="search-input" placeholder="Filter by IP, city, country, player, or User-Agent..." />
+          </div>
+
+          <select id="categoryFilterSelect" class="select-control" aria-label="Filter by client category">
+            <option value="ALL">All Client Types</option>
+            <option value="Web Browser">Web Browsers</option>
+            <option value="Desktop Player">Desktop Players</option>
+            <option value="Mobile / Native">Mobile / Native Apps</option>
+            <option value="Smart Speaker">Smart Speakers</option>
+            <option value="Bot / Ripper">Stream Rippers / Bots</option>
+          </select>
+
+          <button id="exportCsvBtn" class="btn" title="Export active listener table to CSV">Export CSV</button>
+          <button id="exportJsonBtn" class="btn" title="Export full telemetry snapshot to JSON">Export JSON</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="clients-table" id="clientsTable">
+          <thead>
+            <tr>
+              <th data-sort="clientId">Client ID</th>
+              <th data-sort="ip">IP Address</th>
+              <th data-sort="location">Location (City / Country)</th>
+              <th data-sort="connectedSeconds">Connected Time ↓</th>
+              <th data-sort="player">Player / User-Agent</th>
+              <th data-sort="os">OS / Category</th>
+              <th>Mount</th>
+              <th>Admin Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clientsTableBody">
+            <tr>
+              <td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Loading active Icecast listeners...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal 1: Icecast Server & Credentials Configuration -->
+  <div id="settingsModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="settingsModalTitle">Icecast Admin Connection &amp; Telemetry Settings</h3>
+        <button class="modal-close" id="closeSettingsModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="settingsForm">
+        <div class="modal-body">
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="cfgBaseUrl">Icecast Server URL (Host &amp; Port)</label>
+              <input type="url" id="cfgBaseUrl" class="form-input mono" required placeholder="https://live.ozone.fm:8443" />
+            </div>
+            <div class="form-row">
+              <label for="cfgMount">Mountpoint</label>
+              <input type="text" id="cfgMount" class="form-input mono" required placeholder="/listen" />
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="cfgUsername">Admin Username</label>
+              <input type="text" id="cfgUsername" class="form-input mono" required placeholder="admin" />
+            </div>
+            <div class="form-row">
+              <label for="cfgPassword">Admin Password</label>
+              <input type="password" id="cfgPassword" class="form-input mono" placeholder="••••••••••••" />
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="cfgStationName">Station Display Name</label>
+              <input type="text" id="cfgStationName" class="form-input" placeholder="OZONE.FM" />
+            </div>
+            <div class="form-row">
+              <label for="cfgSourceMode">Telemetry Feed Mode</label>
+              <select id="cfgSourceMode" class="form-input">
+                <option value="auto">Auto (Connect to Live 8443, Fallback if Proxy-Blocked)</option>
+                <option value="live">Strict Live Server Only (live.ozone.fm:8443)</option>
+                <option value="simulation">Simulation / Demo Feed</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label for="cfgMaxCapacity">Max Listener Capacity</label>
+              <input type="number" id="cfgMaxCapacity" class="form-input mono" min="10" max="100000" value="500" />
+            </div>
+            <div class="form-row" style="justify-content:flex-end">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:8px">
+                <input type="checkbox" id="cfgIgnoreTls" checked />
+                <span>Allow self-signed SSL certificates on port 8443</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="testConnectionResultBox" style="display:none;padding:10px 12px;border-radius:6px;font-size:12px" class="mono"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="testConnectionBtn" class="btn">Test Connection to 8443</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" id="cancelSettingsBtn" class="btn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save &amp; Apply</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Import Raw listclients.xsl HTML or XML Snapshot -->
+  <div id="importModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="importModalTitle">Import Icecast listclients.xsl HTML or XML Snapshot</h3>
+        <button class="modal-close" id="closeImportModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px;color:var(--text-secondary)">
+          Open <a href="https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen" target="_blank" rel="noopener" style="color:var(--accent-amber)">https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen</a> in your browser, view source or copy the page HTML/XML, and paste it below to parse all listener IPs, durations, and User-Agents immediately:
+        </p>
+        <div class="form-row">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <label for="importPayloadTextarea">Raw HTML (listclients.xsl) or XML (/admin/listclients)</label>
+            <button type="button" id="loadSampleXslBtn" class="btn" style="padding:3px 8px;font-size:11px">Load Sample listclients.xsl</button>
+          </div>
+          <textarea id="importPayloadTextarea" class="form-textarea" placeholder="Paste <table>...</table> from listclients.xsl or <icestats>...</icestats> XML here..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span id="importErrorMsg" style="font-size:12px;color:var(--accent-crimson)"></span>
+        <div style="display:flex;gap:8px">
+          <button type="button" id="cancelImportBtn" class="btn">Cancel</button>
+          <button type="button" id="submitImportBtn" class="btn btn-primary">Parse &amp; Analyze Snapshot</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: IP History & Geolocation Inspector -->
+  <div id="ipModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="ipModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="ipModalTitle" class="mono">Listener IP Dossier</h3>
+        <button class="modal-close" id="closeIpModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" id="ipModalContent">
+        Loading IP telemetry...
+      </div>
+      <div class="modal-footer">
+        <span>SQLite Historical Session Dossier</span>
+        <button type="button" id="closeIpModalFooterBtn" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+  <script src="/world-map.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

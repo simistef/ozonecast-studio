@@ -1,0 +1,7 @@
+node_modules
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+.git
+.gemini
+npm-debug.log*
