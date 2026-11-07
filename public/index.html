@@ -92,6 +92,12 @@
         <span>Import XSL</span>
       </button>
 
+      <label class="topbar-check-label" id="excludeBotsWrap" title="Exclude flagged bots and stream rippers from telemetry statistics and graphs">
+        <input type="checkbox" id="excludeBotsCheckbox" />
+        <span class="topbar-check-indicator"></span>
+        <span class="topbar-check-text">Exclude Bots</span>
+      </label>
+
       <button id="openSettingsModalBtn" class="btn btn-primary">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
@@ -121,7 +127,10 @@
       <article class="kpi-card">
         <div class="kpi-header">
           <span>CONCURRENT LISTENERS</span>
-          <span id="capacityPctBadge" class="kpi-subtag emerald">0% cap</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span id="kpiBotsFilterBadge" class="kpi-subtag warning hidden" title="Flagged bots and stream rippers excluded from statistics">🤖 Filtered</span>
+            <span id="capacityPctBadge" class="kpi-subtag emerald">0% cap</span>
+          </div>
         </div>
         <div class="kpi-value-row">
           <div id="kpiCurrentListeners" class="kpi-number">0</div>

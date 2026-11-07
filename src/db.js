@@ -46,7 +46,9 @@ db.exec(`
     peak_reported INTEGER DEFAULT 0,
     current_track TEXT DEFAULT '',
     bitrate INTEGER DEFAULT 128,
-    source_mode TEXT DEFAULT 'live'
+    source_mode TEXT DEFAULT 'live',
+    human_count INTEGER DEFAULT NULL,
+    human_unique_ips INTEGER DEFAULT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_snapshots_ts ON snapshots(ts);
 
@@ -147,9 +149,20 @@ function updateConfig(partial) {
   return next;
 }
 
+// Ensure human_count and human_unique_ips columns exist on existing databases
+try {
+  db.exec('ALTER TABLE snapshots ADD COLUMN human_count INTEGER DEFAULT NULL;');
+} catch (_) {}
+try {
+  db.exec('ALTER TABLE snapshots ADD COLUMN human_unique_ips INTEGER DEFAULT NULL;');
+} catch (_) {}
+try {
+  db.exec('UPDATE snapshots SET human_count = listener_count, human_unique_ips = unique_ips WHERE human_count IS NULL;');
+} catch (_) {}
+
 const insertSnapshotStmt = db.prepare(`
-  INSERT INTO snapshots (ts, mount, listener_count, unique_ips, peak_reported, current_track, bitrate, source_mode)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO snapshots (ts, mount, listener_count, unique_ips, peak_reported, current_track, bitrate, source_mode, human_count, human_unique_ips)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const insertEventStmt = db.prepare(`
@@ -202,6 +215,9 @@ function recordPollResult({
 }) {
   const now = Date.now();
   const uniqueIps = new Set(enrichedListeners.map(l => l.ip)).size;
+  const humanListeners = enrichedListeners.filter(l => !l.isBot);
+  const humanCount = humanListeners.length;
+  const humanUniqueIps = new Set(humanListeners.map(l => l.ip)).size;
 
   insertSnapshotStmt.run(
     now,
@@ -211,7 +227,9 @@ function recordPollResult({
     reportedPeak || enrichedListeners.length,
     currentTrack || '',
     bitrate || 128,
-    sourceMode
+    sourceMode,
+    humanCount,
+    humanUniqueIps
   );
 
   if (currentTrack && lastTrack && currentTrack !== lastTrack) {
@@ -310,16 +328,19 @@ function formatDurationShort(sec) {
   return `${rem}s`;
 }
 
-function getHistoricalSeries(rangeMinutes = 60, sourceMode = null) {
+function getHistoricalSeries(rangeMinutes = 60, sourceMode = null, excludeBots = false) {
   const since = Date.now() - rangeMinutes * 60 * 1000;
+  const countCol = excludeBots ? 'COALESCE(human_count, listener_count)' : 'listener_count';
+  const ipCol = excludeBots ? 'COALESCE(human_unique_ips, unique_ips)' : 'unique_ips';
+
   let rows;
   if (sourceMode) {
     rows = db
-      .prepare('SELECT ts, listener_count, unique_ips, peak_reported, current_track FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY ts ASC')
+      .prepare(`SELECT ts, ${countCol} as listener_count, ${ipCol} as unique_ips, peak_reported, current_track FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY ts ASC`)
       .all(since, sourceMode);
   } else {
     rows = db
-      .prepare('SELECT ts, listener_count, unique_ips, peak_reported, current_track FROM snapshots WHERE ts >= ? ORDER BY ts ASC')
+      .prepare(`SELECT ts, ${countCol} as listener_count, ${ipCol} as unique_ips, peak_reported, current_track FROM snapshots WHERE ts >= ? ORDER BY ts ASC`)
       .all(since);
   }
 
@@ -348,10 +369,13 @@ function getHistoricalSeries(rangeMinutes = 60, sourceMode = null) {
  * so the station owner can see when listeners usually tune in across the day,
  * plus daypart averages (Morning Drive, Midday Work, Evening Prime, Late Night).
  */
-function getTimeOfDayProfile(sourceMode = 'live') {
+function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false) {
   const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  const countCol = excludeBots ? 'COALESCE(human_count, listener_count)' : 'listener_count';
+  const ipCol = excludeBots ? 'COALESCE(human_unique_ips, unique_ips)' : 'unique_ips';
+
   const rows = db
-    .prepare('SELECT ts, listener_count, unique_ips FROM snapshots WHERE ts >= ? AND source_mode = ?')
+    .prepare(`SELECT ts, ${countCol} as listener_count, ${ipCol} as unique_ips FROM snapshots WHERE ts >= ? AND source_mode = ?`)
     .all(sevenDaysAgo, sourceMode);
 
   const buckets = Array.from({ length: 24 }, (_, hour) => {
@@ -546,19 +570,20 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live') {
   }));
 }
 
-function getAggregatedStats(sourceMode = 'live') {
+function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
   const now = Date.now();
   const dayAgo = now - 24 * 3600 * 1000;
   const cfg = getConfig();
   const minAvgSec = Math.max(0, Number(cfg.returningMinAvgSec ?? 60));
-  const excludeBots = cfg.returningExcludeBots !== false ? 1 : 0;
+  const excludeFlag = excludeBots || cfg.returningExcludeBots !== false ? 1 : 0;
+  const countCol = excludeBots ? 'COALESCE(human_count, listener_count)' : 'listener_count';
 
   const peak24hRow = db
-    .prepare('SELECT listener_count, ts, peak_reported FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY listener_count DESC LIMIT 1')
+    .prepare(`SELECT ${countCol} as listener_count, ts, peak_reported FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY ${countCol} DESC LIMIT 1`)
     .get(dayAgo, sourceMode);
 
   const allTimePeakRow = db
-    .prepare('SELECT MAX( MAX(listener_count), MAX(peak_reported) ) as peak, ts FROM snapshots WHERE source_mode = ?')
+    .prepare(`SELECT MAX( MAX(${countCol}), MAX(peak_reported) ) as peak, ts FROM snapshots WHERE source_mode = ?`)
     .get(sourceMode);
 
   const sessionStats24h = db
@@ -571,8 +596,17 @@ function getAggregatedStats(sourceMode = 'live') {
         SUM(duration_seconds) as total_listening_sec
       FROM listener_sessions
       WHERE last_seen >= ? AND source_mode = ?
+        AND (? = 0 OR (
+          category != 'Bot / Ripper'
+          AND ip NOT IN (SELECT ip FROM bot_ips)
+          AND LOWER(user_agent) NOT LIKE '%bot%'
+          AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+          AND LOWER(user_agent) NOT LIKE '%crawler%'
+          AND LOWER(user_agent) NOT LIKE '%spider%'
+          AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        ))
     `)
-    .get(dayAgo, sourceMode);
+    .get(dayAgo, sourceMode, excludeBots ? 1 : 0);
 
   const returningCountRow = db
     .prepare(`
@@ -594,7 +628,7 @@ function getAggregatedStats(sourceMode = 'live') {
         HAVING COUNT(*) > 1 AND AVG(duration_seconds) >= ?
       )
     `)
-    .get(sourceMode, excludeBots, minAvgSec);
+    .get(sourceMode, excludeFlag, minAvgSec);
 
   const recentEvents = db
     .prepare('SELECT * FROM events_log ORDER BY ts DESC LIMIT 60')

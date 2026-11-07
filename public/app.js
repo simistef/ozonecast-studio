@@ -2,6 +2,7 @@
   let dashboardState = null;
   let lastFetchClientTime = Date.now();
   let selectedRangeMinutes = 60;
+  let excludeBotsSetting = localStorage.getItem('ozonecast_exclude_bots') === '1';
   let mapViewMode = 'europe'; // 'europe' | 'romania' | 'world'
   let geoTabMode = 'countries'; // 'countries' | 'cities'
   let rightMidTabMode = 'retention'; // 'retention' | 'events'
@@ -74,7 +75,7 @@
 
   async function fetchDashboard() {
     try {
-      const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}`);
+      const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}&excludeBots=${excludeBotsSetting ? '1' : '0'}`);
       const data = await res.json();
       if (!data.ok) return;
       dashboardState = data;
@@ -144,6 +145,19 @@
     const capPct = Math.min(100, Math.round((kpis.currentListeners / (kpis.maxCapacity || 500)) * 100));
     document.getElementById('kpiCurrentListeners').textContent = kpis.currentListeners;
     document.getElementById('kpiUniqueIpsTag').textContent = `${kpis.uniqueIps} unique IPs`;
+
+    const botFilterBadge = document.getElementById('kpiBotsFilterBadge');
+    if (botFilterBadge) {
+      if (excludeBotsSetting) {
+        const botCount = kpis.botListenersCount || 0;
+        botFilterBadge.textContent = botCount > 0 ? `🤖 ${botCount} Excluded` : '🤖 Excluded';
+        botFilterBadge.title = `${botCount} flagged bot/ripper connections excluded from telemetry statistics`;
+        botFilterBadge.classList.remove('hidden');
+      } else {
+        botFilterBadge.classList.add('hidden');
+      }
+    }
+
     document.getElementById('capacityPctBadge').textContent = `${capPct}% cap`;
     document.getElementById('capacityMeterFill').style.width = `${Math.max(2, capPct)}%`;
     document.getElementById('kpiMountName').textContent = connection.mount || '/listen';
@@ -178,7 +192,8 @@
     const svgEl = document.getElementById('worldMapSvg');
     const tooltipEl = document.getElementById('mapTooltip');
     if (window.OzoneWorldMap) {
-      window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, listeners, mapViewMode, ip => openIpInspector(ip));
+      const mapListeners = excludeBotsSetting ? listeners.filter(l => !l.isBot) : listeners;
+      window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, mapListeners, mapViewMode, ip => openIpInspector(ip));
     }
     renderGeoBreakdown(breakdowns);
 
@@ -844,6 +859,10 @@
       liveConnectedSeconds: (l.connectedSeconds || 0) + elapsedSec,
     }));
 
+    if (excludeBotsSetting) {
+      rows = rows.filter(r => !r.isBot);
+    }
+
     if (tableCategoryFilter !== 'ALL') {
       rows = rows.filter(r => r.ua?.category === tableCategoryFilter);
     }
@@ -894,7 +913,12 @@
     });
 
     if (countBadge) {
-      countBadge.textContent = `${rows.length} of ${dashboardState.listeners.length} clients`;
+      if (excludeBotsSetting) {
+        const botCount = (dashboardState.kpis?.botListenersCount ?? (dashboardState.listeners || []).filter(l => l.isBot).length);
+        countBadge.textContent = `${rows.length} human listeners (${botCount} bots excluded)`;
+      } else {
+        countBadge.textContent = `${rows.length} of ${dashboardState.listeners.length} clients`;
+      }
     }
 
     if (rows.length === 0) {
@@ -1362,6 +1386,25 @@
         }
       }
     });
+
+    // Exclude Bots checkbox toggle next to Icecast Server button
+    const excludeBotsCb = document.getElementById('excludeBotsCheckbox');
+    const excludeBotsWrap = document.getElementById('excludeBotsWrap');
+    if (excludeBotsCb) {
+      excludeBotsCb.checked = excludeBotsSetting;
+      if (excludeBotsWrap) excludeBotsWrap.classList.toggle('checked', excludeBotsSetting);
+      excludeBotsCb.addEventListener('change', () => {
+        excludeBotsSetting = excludeBotsCb.checked;
+        localStorage.setItem('ozonecast_exclude_bots', excludeBotsSetting ? '1' : '0');
+        if (excludeBotsWrap) excludeBotsWrap.classList.toggle('checked', excludeBotsSetting);
+        showToast(
+          excludeBotsSetting
+            ? '🤖 Flagged bots excluded from all telemetry statistics & graphs'
+            : '👥 Including all listeners and bots in telemetry statistics'
+        );
+        fetchDashboard();
+      });
+    }
 
     // Manual Refresh & Retry Live
     document.getElementById('manualRefreshBtn')?.addEventListener('click', async () => {

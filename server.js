@@ -402,16 +402,23 @@ app.get('/api/dashboard', async (req, res) => {
     await executePollCycle();
   }
   const rangeMinutes = Math.min(10080, Math.max(5, parseInt(req.query.rangeMinutes || '60', 10) || 60));
+  const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
   const modeForHistory = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
-  const breakdowns = computeBreakdowns(latestState.listeners);
-  const history = getHistoricalSeries(rangeMinutes, modeForHistory);
-  const timeOfDay = getTimeOfDayProfile(modeForHistory);
+
+  const allListeners = latestState.listeners || [];
+  const humanListeners = allListeners.filter(l => !l.isBot);
+  const botListeners = allListeners.filter(l => l.isBot);
+  const effectiveListeners = excludeBots ? humanListeners : allListeners;
+
+  const breakdowns = computeBreakdowns(effectiveListeners);
+  const history = getHistoricalSeries(rangeMinutes, modeForHistory, excludeBots);
+  const timeOfDay = getTimeOfDayProfile(modeForHistory, excludeBots);
   const topReturningListeners = getTopReturningListeners(5, modeForHistory);
-  const stats24h = getAggregatedStats(modeForHistory);
+  const stats24h = getAggregatedStats(modeForHistory, excludeBots);
   const config = getConfig();
   const ipAliases = getIpAliasesMap();
 
-  const listenersWithAliases = latestState.listeners.map(l => ({
+  const listenersWithAliases = allListeners.map(l => ({
     ...l,
     friendlyName: ipAliases[l.ip]?.friendlyName || '',
     notes: ipAliases[l.ip]?.notes || '',
@@ -420,6 +427,7 @@ app.get('/api/dashboard', async (req, res) => {
   res.json({
     ok: true,
     timestamp: latestState.lastUpdatedTs,
+    excludeBots,
     connection: {
       activeSourceMode: latestState.activeSourceMode,
       configuredMode: latestState.configuredMode,
@@ -433,8 +441,12 @@ app.get('/api/dashboard', async (req, res) => {
     },
     stream: latestState.sourceMeta,
     kpis: {
-      currentListeners: latestState.listeners.length,
-      reportedListeners: latestState.reportedCount,
+      currentListeners: effectiveListeners.length,
+      totalListenersRaw: allListeners.length,
+      humanListenersCount: humanListeners.length,
+      botListenersCount: botListeners.length,
+      excludeBots,
+      reportedListeners: excludeBots ? humanListeners.length : latestState.reportedCount,
       uniqueIps: breakdowns.uniqueIps,
       duplicateConnections: breakdowns.duplicateConnections,
       avgSessionDurationSec: breakdowns.avgSessionDurationSec,
@@ -443,9 +455,9 @@ app.get('/api/dashboard', async (req, res) => {
       longestSessionSec: breakdowns.longestSessionSec,
       shortestSessionSec: breakdowns.shortestSessionSec,
       totalActiveListeningHours: breakdowns.totalActiveListeningHours,
-      peak24h: Math.max(stats24h.peak24h, latestState.listeners.length, latestState.sourceMeta.listenerPeak || 0),
+      peak24h: Math.max(stats24h.peak24h, effectiveListeners.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
       peak24hTs: stats24h.peak24hTs,
-      allTimePeak: Math.max(stats24h.allTimePeak, latestState.listeners.length, latestState.sourceMeta.listenerPeak || 0),
+      allTimePeak: Math.max(stats24h.allTimePeak, effectiveListeners.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
       totalSessions24h: stats24h.totalSessions24h,
       uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdowns.uniqueIps),
       uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdowns.countries.length),
