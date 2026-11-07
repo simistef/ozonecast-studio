@@ -392,6 +392,61 @@ function getHistoricalSeries(rangeMinutes = 60, sourceMode = null, excludeBots =
 }
 
 /**
+ * Retrieves track change events within the requested historical window (rangeMinutes).
+ * Combines event_log ('track' events) and snapshots transitions where current_track changed.
+ */
+function getHistoricalTrackChanges(rangeMinutes = 60, sourceMode = null) {
+  const since = Date.now() - rangeMinutes * 60 * 1000;
+
+  // 1. Query track change events from events_log
+  const eventRows = db
+    .prepare("SELECT ts, details FROM events_log WHERE event_type = 'track' AND ts >= ? ORDER BY ts ASC")
+    .all(since);
+
+  // 2. Query snapshots for track transitions
+  let snapRows;
+  if (sourceMode) {
+    snapRows = db
+      .prepare("SELECT ts, current_track, listener_count FROM snapshots WHERE ts >= ? AND source_mode = ? AND current_track IS NOT NULL AND current_track != '' ORDER BY ts ASC")
+      .all(since, sourceMode);
+  } else {
+    snapRows = db
+      .prepare("SELECT ts, current_track, listener_count FROM snapshots WHERE ts >= ? AND current_track IS NOT NULL AND current_track != '' ORDER BY ts ASC")
+      .all(since);
+  }
+
+  const transitions = [];
+  let lastTrack = '';
+  for (const s of snapRows) {
+    if (s.current_track && s.current_track !== lastTrack) {
+      lastTrack = s.current_track;
+      transitions.push({
+        ts: s.ts,
+        track: s.current_track,
+        listener_count: s.listener_count || 0,
+      });
+    }
+  }
+
+  // Merge events_log if any event occurred that wasn't in snapshots
+  for (const ev of eventRows) {
+    const track = (ev.details || '').replace(/^Now Playing:\s*/i, '').trim();
+    if (!track) continue;
+    const existing = transitions.find(t => t.track === track && Math.abs(t.ts - ev.ts) < 45000);
+    if (!existing) {
+      transitions.push({
+        ts: ev.ts,
+        track,
+        listener_count: 0,
+      });
+    }
+  }
+
+  transitions.sort((a, b) => a.ts - b.ts);
+  return transitions;
+}
+
+/**
  * Computes 24-Hour Time-of-Day Listener Profile (00:00 to 23:00)
  * so the station owner can see when listeners usually tune in across the day,
  * plus daypart averages (Morning Drive, Midday Work, Evening Prime, Late Night).
@@ -823,6 +878,7 @@ module.exports = {
   updateConfig,
   recordPollResult,
   getHistoricalSeries,
+  getHistoricalTrackChanges,
   getTimeOfDayProfile,
   getTopReturningListeners,
   getAggregatedStats,

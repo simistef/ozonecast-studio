@@ -199,7 +199,7 @@
     renderGeoBreakdown(breakdowns);
 
     // 4. Historical Chart & Retention / Events
-    renderHistoryChart(history);
+    renderHistoryChart(history, dashboardState.trackChanges);
     renderRetentionAndEvents(breakdowns.durationBuckets, recentEvents);
 
     // 4.5. Time-of-Day Profile, Connected Time Stats & Top 5 Returning Listeners
@@ -592,7 +592,9 @@
   }
 
   let currentHistoryData = [];
+  let currentTrackChanges = [];
   let historyHoverIdx = null;
+  let showTracksSetting = localStorage.getItem('ozonecast_show_tracks') !== '0'; // default true
 
   function getDynamicYScale(rawMax) {
     if (rawMax <= 1) return { maxVal: 2, steps: 2 };
@@ -626,7 +628,7 @@
     return { maxVal, steps };
   }
 
-  function renderHistoryChart(historySeries) {
+  function renderHistoryChart(historySeries, trackChangesList) {
     const canvas = document.getElementById('historyChartCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -641,6 +643,9 @@
     ctx.clearRect(0, 0, w, h);
 
     currentHistoryData = Array.isArray(historySeries) ? historySeries : [];
+    if (trackChangesList !== undefined) {
+      currentTrackChanges = Array.isArray(trackChangesList) ? trackChangesList : [];
+    }
     const pts = currentHistoryData;
     if (pts.length === 0) {
       ctx.fillStyle = 'hsl(214, 12%, 48%)';
@@ -648,12 +653,14 @@
       ctx.fillText('Collecting time-series snapshots...', 20, h / 2);
       const tip = document.getElementById('historyTooltip');
       if (tip) tip.classList.add('hidden');
+      const badge = document.getElementById('historyTrackCountBadge');
+      if (badge) badge.textContent = '🎵 0 track changes';
       return;
     }
 
     const padLeft = 38;
     const padRight = 14;
-    const padTop = 16;
+    const padTop = 18;
     const padBottom = 26;
     const plotW = w - padLeft - padRight;
     const plotH = h - padTop - padBottom;
@@ -678,6 +685,9 @@
       ctx.stroke();
       ctx.fillText(String(val), padLeft - 8, y + 4);
     }
+
+    const minTs = pts[0].ts;
+    const maxTs = pts[pts.length - 1].ts;
 
     const getX = idx =>
       pts.length === 1 ? padLeft + plotW / 2 : padLeft + (idx / (pts.length - 1)) * plotW;
@@ -727,9 +737,161 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // -------------------------------------------------------------
+    // Track Change Transitions Resolution & Deduplication
+    // -------------------------------------------------------------
+    const allTransitions = [];
+
+    // 1. From server track changes
+    for (const t of currentTrackChanges) {
+      if (t && t.track && t.ts >= minTs - 60000 && t.ts <= maxTs + 60000) {
+        allTransitions.push({
+          ts: t.ts,
+          track: t.track,
+          listener_count: t.listener_count || 0,
+        });
+      }
+    }
+
+    // 2. From snapshots current_track transitions
+    let lastSnapTrack = '';
+    for (const p of pts) {
+      if (p.current_track && p.current_track !== lastSnapTrack) {
+        lastSnapTrack = p.current_track;
+        const exists = allTransitions.some(t => t.track === p.current_track && Math.abs(t.ts - p.ts) < 45000);
+        if (!exists) {
+          allTransitions.push({
+            ts: p.ts,
+            track: p.current_track,
+            listener_count: p.listener_count || 0,
+          });
+        }
+      }
+    }
+
+    allTransitions.sort((a, b) => a.ts - b.ts);
+
+    // Deduplicate identical tracks occurring within 45s
+    const visibleTracks = [];
+    for (const t of allTransitions) {
+      const prev = visibleTracks[visibleTracks.length - 1];
+      if (!prev || prev.track !== t.track || Math.abs(t.ts - prev.ts) > 45000) {
+        visibleTracks.push(t);
+      }
+    }
+
+    // Update track counter badge in panel header
+    const trackBadge = document.getElementById('historyTrackCountBadge');
+    if (trackBadge) {
+      const n = visibleTracks.length;
+      trackBadge.textContent = `🎵 ${n} track ${n === 1 ? 'change' : 'changes'}`;
+    }
+
+    // Map each track transition to exact X and listener curve Y
+    const mappedTracks = visibleTracks.map(tr => {
+      let trX = padLeft;
+      let curveCount = pts[0].listener_count || 0;
+
+      if (pts.length === 1) {
+        trX = padLeft + plotW / 2;
+        curveCount = pts[0].listener_count;
+      } else if (tr.ts <= pts[0].ts) {
+        trX = getX(0);
+        curveCount = pts[0].listener_count;
+      } else if (tr.ts >= pts[pts.length - 1].ts) {
+        trX = getX(pts.length - 1);
+        curveCount = pts[pts.length - 1].listener_count;
+      } else {
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (tr.ts >= pts[i].ts && tr.ts <= pts[i + 1].ts) {
+            const segSpan = Math.max(1, pts[i + 1].ts - pts[i].ts);
+            const segFrac = (tr.ts - pts[i].ts) / segSpan;
+            const x0 = getX(i);
+            const x1 = getX(i + 1);
+            trX = x0 + segFrac * (x1 - x0);
+            curveCount = (pts[i].listener_count || 0) + segFrac * ((pts[i + 1].listener_count || 0) - (pts[i].listener_count || 0));
+            break;
+          }
+        }
+      }
+      return {
+        ...tr,
+        trX: Math.max(padLeft, Math.min(w - padRight, trX)),
+        curveY: getY(curveCount),
+        curveCount: Math.round(curveCount),
+      };
+    });
+
+    // -------------------------------------------------------------
+    // Render Track Markers when enabled
+    // -------------------------------------------------------------
+    if (showTracksSetting) {
+      const canShowTitles = mappedTracks.length <= 10 && (plotW / Math.max(1, mappedTracks.length)) >= 45;
+
+      mappedTracks.forEach(tr => {
+        // 1. Vertical track marker dashed line
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = 'hsla(280, 80%, 65%, 0.42)';
+        ctx.lineWidth = 1.3;
+        ctx.moveTo(tr.trX, padTop + 14);
+        ctx.lineTo(tr.trX, padTop + plotH);
+        ctx.stroke();
+        ctx.restore();
+
+        // 2. Glowing pin rooted on the listener curve
+        ctx.beginPath();
+        ctx.arc(tr.trX, tr.curveY, 6.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'hsla(280, 90%, 65%, 0.28)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(tr.trX, tr.curveY, 3.8, 0, Math.PI * 2);
+        ctx.fillStyle = 'hsl(280, 88%, 66%)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(tr.trX, tr.curveY, 1.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        // 3. Music note badge at top of line
+        ctx.beginPath();
+        ctx.arc(tr.trX, padTop + 7, 7.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'hsla(280, 60%, 18%, 0.92)';
+        ctx.fill();
+        ctx.strokeStyle = 'hsla(280, 85%, 68%, 0.8)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.fillStyle = 'hsl(280, 95%, 92%)';
+        ctx.font = '10px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('♪', tr.trX, padTop + 7.5);
+
+        // 4. Clean rotated song title label if spacing permits
+        if (canShowTitles) {
+          ctx.save();
+          ctx.translate(tr.trX + 3.5, padTop + 22);
+          ctx.rotate(Math.PI / 2);
+          ctx.font = '500 9.5px "JetBrains Mono", monospace';
+          ctx.fillStyle = 'hsla(280, 80%, 88%, 0.82)';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          let label = tr.track;
+          if (label.length > 22) label = label.substring(0, 20) + '…';
+          ctx.fillText(label, 0, 0);
+          ctx.restore();
+        }
+      });
+    }
+
     // X-axis time labels
     ctx.fillStyle = 'hsl(214, 12%, 48%)';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
     const labelCount = Math.min(6, pts.length);
     for (let i = 0; i < labelCount; i++) {
       const idx = Math.floor((i / Math.max(1, labelCount - 1)) * (pts.length - 1));
@@ -739,13 +901,29 @@
       ctx.fillText(label, x, h - 6);
     }
 
+    // -------------------------------------------------------------
     // Hover Tracking Overlay & Tooltip
+    // -------------------------------------------------------------
     const tooltip = document.getElementById('historyTooltip');
     if (historyHoverIdx !== null && pts[historyHoverIdx]) {
       const p = pts[historyHoverIdx];
       const ptX = getX(historyHoverIdx);
       const ptY1 = getY(p.listener_count);
       const ptY2 = getY(p.unique_ips || p.listener_count);
+
+      // Check proximity to any track transition
+      let closestTr = null;
+      let closestDist = Infinity;
+      if (mappedTracks.length > 0) {
+        for (const tr of mappedTracks) {
+          const dist = Math.abs(tr.trX - ptX);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestTr = tr;
+          }
+        }
+      }
+      const isNearTrack = showTracksSetting && closestTr && closestDist <= 16;
 
       // 1. Vertical guideline
       ctx.beginPath();
@@ -757,7 +935,22 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 2. Active Listeners dot (amber)
+      // 2. Highlight track marker if hovering near transition
+      if (isNearTrack) {
+        ctx.beginPath();
+        ctx.arc(closestTr.trX, closestTr.curveY, 11, 0, Math.PI * 2);
+        ctx.strokeStyle = 'hsl(280, 95%, 75%)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(closestTr.trX, padTop + 7, 10.5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'hsl(280, 95%, 75%)';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+      }
+
+      // 3. Active Listeners dot (amber)
       ctx.beginPath();
       ctx.arc(ptX, ptY1, 6.5, 0, Math.PI * 2);
       ctx.fillStyle = 'hsla(28, 95%, 56%, 0.32)';
@@ -771,7 +964,7 @@
       ctx.fillStyle = '#ffffff';
       ctx.fill();
 
-      // 3. Unique IPs dot (cyan)
+      // 4. Unique IPs dot (cyan)
       ctx.beginPath();
       ctx.arc(ptX, ptY2, 5.5, 0, Math.PI * 2);
       ctx.fillStyle = 'hsla(196, 88%, 54%, 0.32)';
@@ -785,12 +978,52 @@
       ctx.fillStyle = '#ffffff';
       ctx.fill();
 
-      // 4. Update and position HTML tooltip
+      // 5. Update and position HTML tooltip
       if (tooltip) {
         const isMultiDay = selectedRangeMinutes > 1440;
         const timeStr = isMultiDay
           ? new Date(p.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
           : new Date(p.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        // Resolve current track playing at this timestamp
+        let playingTrack = p.current_track;
+        if (!playingTrack && mappedTracks.length > 0) {
+          for (let i = mappedTracks.length - 1; i >= 0; i--) {
+            if (mappedTracks[i].ts <= p.ts) {
+              playingTrack = mappedTracks[i].track;
+              break;
+            }
+          }
+        }
+
+        let trackSectionHtml = '';
+        if (isNearTrack) {
+          const trackTimeStr = new Date(closestTr.ts).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+          trackSectionHtml = `
+            <div style="margin-top:8px;padding:6px 9px;background:hsla(280,75%,45%,0.2);border:1px solid hsla(280,85%,65%,0.45);border-radius:6px">
+              <div style="font-size:10px;font-weight:700;color:hsl(280,95%,85%);text-transform:uppercase;letter-spacing:0.06em;display:flex;align-items:center;justify-content:space-between;gap:6px">
+                <span>✨ TRACK CHANGED HERE</span>
+                <span style="color:var(--text-muted);font-weight:400;font-family:'JetBrains Mono',monospace">${trackTimeStr}</span>
+              </div>
+              <div style="font-weight:600;font-size:12px;color:#ffffff;margin-top:3px;max-width:270px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(closestTr.track)}">
+                🎵 ${escapeHtml(closestTr.track)}
+              </div>
+              <div style="font-size:11px;color:hsl(280,80%,85%);margin-top:2px;font-family:'JetBrains Mono',monospace">
+                Concurrence at transition: <strong>${closestTr.curveCount}</strong> listeners
+              </div>
+            </div>
+          `;
+        } else if (playingTrack) {
+          trackSectionHtml = `
+            <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle);font-size:11.5px;color:var(--text-secondary);max-width:270px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(playingTrack)}">
+              🎵 <span style="color:hsl(280,90%,85%)">${escapeHtml(playingTrack)}</span>
+            </div>
+          `;
+        }
 
         tooltip.innerHTML = `
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.04em;margin-bottom:6px">
@@ -810,21 +1043,13 @@
             </span>
             <strong style="color:hsl(196,88%,54%);font-family:'JetBrains Mono',monospace;font-size:13px">${p.unique_ips || p.listener_count}</strong>
           </div>
-          ${
-            p.current_track
-              ? `
-          <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle);font-size:11px;color:var(--text-secondary);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(p.current_track)}">
-            🎵 ${escapeHtml(p.current_track)}
-          </div>
-          `
-              : ''
-          }
+          ${trackSectionHtml}
         `;
 
         const containerW = rect.width;
-        let left = Math.max(90, Math.min(containerW - 90, ptX));
+        let left = Math.max(110, Math.min(containerW - 110, ptX));
 
-        if (ptY1 < 75) {
+        if (ptY1 < 85) {
           tooltip.style.transform = 'translate(-50%, 0)';
           tooltip.style.marginTop = '14px';
           tooltip.style.left = left + 'px';
@@ -1305,6 +1530,25 @@
       document.getElementById('geoTabCountriesBtn')?.classList.remove('active');
       if (dashboardState) renderGeoBreakdown(dashboardState.breakdowns);
     });
+
+    // Historical Track Markers Toggle
+    const showTracksCb = document.getElementById('historyShowTracksCheckbox');
+    const showTracksWrap = document.getElementById('historyShowTracksWrap');
+    if (showTracksCb) {
+      showTracksCb.checked = showTracksSetting;
+      if (showTracksWrap) showTracksWrap.classList.toggle('checked', showTracksSetting);
+      showTracksCb.addEventListener('change', () => {
+        showTracksSetting = showTracksCb.checked;
+        localStorage.setItem('ozonecast_show_tracks', showTracksSetting ? '1' : '0');
+        if (showTracksWrap) showTracksWrap.classList.toggle('checked', showTracksSetting);
+        showToast(
+          showTracksSetting
+            ? '🎵 Showing track change markers on historical curve'
+            : '🎵 Hidden track change markers on historical curve'
+        );
+        renderHistoryChart(currentHistoryData, currentTrackChanges);
+      });
+    }
 
     // Historical Range Tabs
     document.querySelectorAll('#historyRangeTabs .seg-btn').forEach(btn => {
@@ -1809,7 +2053,7 @@
 
     window.addEventListener('resize', () => {
       if (dashboardState) {
-        renderHistoryChart(dashboardState.history);
+        renderHistoryChart(dashboardState.history, dashboardState.trackChanges);
         renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, dashboardState.kpis);
       }
     });

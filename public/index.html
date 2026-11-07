@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=5" />
+  <link rel="stylesheet" href="/index.css?v=6" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar -->
@@ -307,15 +307,25 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Historical Listener Trend &amp; Peak Curve</h2>
-            <div class="panel-subtitle">Time-series concurrency stored in local SQLite database</div>
+            <h2>
+              <span>Historical Listener Trend &amp; Peak Curve</span>
+              <span id="historyTrackCountBadge" class="mount-tag" style="background:hsla(280,75%,55%,0.15);color:hsl(280,95%,85%);border-color:hsla(280,80%,65%,0.35);font-size:11px">🎵 0 track changes</span>
+            </h2>
+            <div class="panel-subtitle">Time-series concurrency stored in local SQLite database with song changes</div>
           </div>
-          <div class="segmented-tabs" id="historyRangeTabs">
-            <button class="seg-btn" data-range="15">15m</button>
-            <button class="seg-btn active" data-range="60">1h</button>
-            <button class="seg-btn" data-range="360">6h</button>
-            <button class="seg-btn" data-range="1440">24h</button>
-            <button class="seg-btn" data-range="10080">7d</button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label class="topbar-check-label checked" id="historyShowTracksWrap" style="padding:4px 9px;font-size:11.5px" title="Show or hide vertical track change markers on the curve">
+              <input type="checkbox" id="historyShowTracksCheckbox" checked />
+              <span class="topbar-check-indicator" style="width:13px;height:13px"></span>
+              <span class="topbar-check-text">Track Markers</span>
+            </label>
+            <div class="segmented-tabs" id="historyRangeTabs">
+              <button class="seg-btn" data-range="15">15m</button>
+              <button class="seg-btn active" data-range="60">1h</button>
+              <button class="seg-btn" data-range="360">6h</button>
+              <button class="seg-btn" data-range="1440">24h</button>
+              <button class="seg-btn" data-range="10080">7d</button>
+            </div>
           </div>
         </div>
         <div class="panel-body">
@@ -571,7 +581,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=5"></script>
-  <script src="/app.js?v=5"></script>
+  <script src="/world-map.js?v=6"></script>
+  <script src="/app.js?v=6"></script>
 </body>
 </html>

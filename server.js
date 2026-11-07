@@ -9,6 +9,7 @@ const {
   updateConfig,
   recordPollResult,
   getHistoricalSeries,
+  getHistoricalTrackChanges,
   getTimeOfDayProfile,
   getTopReturningListeners,
   getAggregatedStats,
@@ -429,6 +430,7 @@ app.get('/api/dashboard', async (req, res) => {
 
   const breakdowns = computeBreakdowns(effectiveListeners);
   const history = getHistoricalSeries(rangeMinutes, modeForHistory, excludeBots);
+  const trackChanges = getHistoricalTrackChanges(rangeMinutes, modeForHistory);
   const timeOfDay = getTimeOfDayProfile(modeForHistory, excludeBots);
   const topReturningListeners = getTopReturningListeners(5, modeForHistory);
   const stats24h = getAggregatedStats(modeForHistory, excludeBots);
@@ -497,6 +499,7 @@ app.get('/api/dashboard', async (req, res) => {
     timeOfDay,
     topReturningListeners,
     history,
+    trackChanges,
     recentEvents: stats24h.recentEvents,
   });
 });
