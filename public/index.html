@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=4" />
+  <link rel="stylesheet" href="/index.css?v=5" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar -->
@@ -223,6 +223,12 @@
             <option value="Smart Speaker">Smart Speakers</option>
             <option value="Bot / Ripper">Stream Rippers / Bots</option>
           </select>
+
+          <label class="topbar-check-label checked" id="dedupeToggleWrap" title="Group multiple simultaneous stream connections from the same IP into a single listener row">
+            <input type="checkbox" id="dedupeListenersCheckbox" checked />
+            <span class="topbar-check-indicator"></span>
+            <span class="topbar-check-text">Deduplicate (1 per IP)</span>
+          </label>
 
           <button id="exportCsvBtn" class="btn" title="Export active listener table to CSV">Export CSV</button>
           <button id="exportJsonBtn" class="btn" title="Export full telemetry snapshot to JSON">Export JSON</button>
@@ -565,7 +571,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=4"></script>
-  <script src="/app.js?v=4"></script>
+  <script src="/world-map.js?v=5"></script>
+  <script src="/app.js?v=5"></script>
 </body>
 </html>

@@ -572,25 +572,48 @@ app.post('/api/ip/:ip/bot', (req, res) => {
   }
 });
 
-// API: Kick client
+// API: Kick client(s)
 app.post('/api/kick', async (req, res) => {
-  const { clientId, ip, mount } = req.body || {};
-  if (!clientId) {
-    return res.status(400).json({ ok: false, error: 'clientId is required' });
+  const { clientId, clientIds, ip, mount } = req.body || {};
+  const idsToKick = Array.isArray(clientIds) && clientIds.length > 0
+    ? clientIds.map(String)
+    : (clientId ? [String(clientId)] : []);
+
+  if (idsToKick.length === 0 && !ip) {
+    return res.status(400).json({ ok: false, error: 'clientId, clientIds, or ip is required' });
   }
 
   const config = getConfig();
   try {
     if (latestState.activeSourceMode === 'live') {
-      await kickLiveIcecastClient(config, clientId, mount || config.mount);
-      logCustomEvent('kick', `Kicked client #${clientId} (${ip || 'unknown IP'}) from live server`, ip, mount || config.mount);
+      let targetIds = [...idsToKick];
+      if (targetIds.length === 0 && ip) {
+        targetIds = (latestState.listeners || []).filter(l => l.ip === ip).map(l => String(l.clientId));
+      }
+
+      const kicked = [];
+      for (const cid of targetIds) {
+        try {
+          await kickLiveIcecastClient(config, cid, mount || config.mount);
+          kicked.push(cid);
+        } catch (e) {
+          console.warn(`Kick attempt failed for client #${cid}:`, e.message);
+        }
+      }
+      logCustomEvent('kick', `Kicked listener ${ip || ''} (${kicked.length} stream(s): #${kicked.join(', #')}) from live server`, ip, mount || config.mount);
       await executePollCycle(true);
-      return res.json({ ok: true, mode: 'live', message: `Client #${clientId} disconnected from Icecast` });
+      return res.json({ ok: true, mode: 'live', message: `Disconnected ${kicked.length || 1} connection(s)` });
     } else {
-      const simRes = kickSimulatedClient(clientId);
-      latestState.listeners = latestState.listeners.filter(l => String(l.clientId) !== String(clientId));
-      logCustomEvent('kick', `Kicked client #${clientId} (${ip || simRes.client?.ip || ''})`, ip || simRes.client?.ip || '', mount || config.mount);
-      return res.json({ ok: true, mode: latestState.activeSourceMode, message: `Client #${clientId} disconnected` });
+      let targetIds = [...idsToKick];
+      if (targetIds.length === 0 && ip) {
+        targetIds = (latestState.listeners || []).filter(l => l.ip === ip).map(l => String(l.clientId));
+      }
+      for (const cid of targetIds) {
+        kickSimulatedClient(cid);
+      }
+      latestState.listeners = latestState.listeners.filter(l => !targetIds.includes(String(l.clientId)));
+      logCustomEvent('kick', `Kicked listener ${ip || ''} (${targetIds.length} stream(s))`, ip, mount || config.mount);
+      return res.json({ ok: true, mode: latestState.activeSourceMode, message: `Disconnected ${targetIds.length} connection(s)` });
     }
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });

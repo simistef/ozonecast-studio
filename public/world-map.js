@@ -315,11 +315,33 @@
 
     clusterList.forEach((cluster, idx) => {
       const { x, y } = latLonToXY(cluster.lat, cluster.lon, viewMode);
-      const count = cluster.clients.length;
+
+      // Group cluster clients by IP so multiple connections from the same listener are counted once
+      const ipMap = new Map();
+      for (const c of cluster.clients) {
+        if (!ipMap.has(c.ip)) {
+          ipMap.set(c.ip, {
+            ...c,
+            streamCount: c.connectionsFromIp || 1,
+          });
+        } else {
+          const existing = ipMap.get(c.ip);
+          existing.streamCount = Math.max(existing.streamCount, (existing.streamCount || 1) + 1);
+          if ((c.connectedSeconds || 0) > (existing.connectedSeconds || 0)) {
+            existing.connectedSeconds = c.connectedSeconds;
+            if (c.ua?.player && c.ua.player !== 'Audio Client') {
+              existing.ua = c.ua;
+            }
+          }
+        }
+      }
+      const uniqueClients = Array.from(ipMap.values());
+      cluster.uniqueClients = uniqueClients;
+      const count = uniqueClients.length;
 
       // Classify bots vs humans
-      const botClients = cluster.clients.filter(c => Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
-      const humanClients = cluster.clients.filter(c => !Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+      const botClients = uniqueClients.filter(c => Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+      const humanClients = uniqueClients.filter(c => !Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
       const botCount = botClients.length;
       const humanCount = humanClients.length;
       const isBotOnly = botCount > 0 && humanCount === 0;
@@ -480,18 +502,22 @@
       group.addEventListener('mouseenter', () => {
         if (!tooltipEl) return;
 
-        const botClients = cluster.clients.filter(c => Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
-        const humanClients = cluster.clients.filter(c => !Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+        const displayClients = cluster.uniqueClients || cluster.clients;
+        const botClients = displayClients.filter(c => Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+        const humanClients = displayClients.filter(c => !Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
         const botCount = botClients.length;
         const humanCount = humanClients.length;
 
-        const topClients = cluster.clients.slice(0, 5);
+        const topClients = displayClients.slice(0, 5);
         const clientLines = topClients
           .map(c => {
             const isCategorizedBot = Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper');
             const botTag = isCategorizedBot
               ? '<span style="background:rgba(255,77,109,0.22);color:#ff4d6d;border:1px solid rgba(255,77,109,0.45);border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:6px">🤖 BOT</span>'
               : '<span style="background:rgba(46,196,182,0.18);color:#2ec4b6;border:1px solid rgba(46,196,182,0.4);border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:6px">👤 LISTENER</span>';
+            const dupBadge = (c.streamCount > 1 || c.connectionsFromIp > 1)
+              ? '<span style="background:rgba(255,159,28,0.22);color:var(--accent-amber);border:1px solid rgba(255,159,28,0.4);border-radius:3px;padding:0 4px;font-size:10px;font-weight:700;margin-left:4px" title="' + (c.streamCount || c.connectionsFromIp) + ' simultaneous connections">' + (c.streamCount || c.connectionsFromIp) + 'x</span>'
+              : '';
             const nameHtml = c.friendlyName
               ? '<strong style="color:var(--accent-amber)">' +
                 c.friendlyName.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
@@ -503,6 +529,7 @@
               '<div class="mono" style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:3px">' +
               '<span>' +
               nameHtml +
+              dupBadge +
               ' • ' +
               (c.ua?.player || 'Audio Player') +
               '</span>' +
@@ -513,9 +540,9 @@
           .join('');
 
         const extra =
-          cluster.clients.length > 5
+          displayClients.length > 5
             ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+' +
-              (cluster.clients.length - 5) +
+              (displayClients.length - 5) +
               ' more in ' +
               (cluster.city || cluster.countryName) +
               '</div>'
@@ -579,8 +606,9 @@
       });
 
       group.addEventListener('click', () => {
-        if (onSelectIp && cluster.clients[0]) {
-          onSelectIp(cluster.clients[0].ip);
+        const displayClients = cluster.uniqueClients || cluster.clients;
+        if (onSelectIp && displayClients[0]) {
+          onSelectIp(displayClients[0].ip);
         }
       });
     });

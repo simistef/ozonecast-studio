@@ -3,6 +3,7 @@
   let lastFetchClientTime = Date.now();
   let selectedRangeMinutes = 60;
   let excludeBotsSetting = localStorage.getItem('ozonecast_exclude_bots') === '1';
+  let dedupeListenersSetting = localStorage.getItem('ozonecast_dedupe_listeners') !== '0'; // default true
   let mapViewMode = 'europe'; // 'europe' | 'romania' | 'world'
   let geoTabMode = 'countries'; // 'countries' | 'cities'
   let rightMidTabMode = 'retention'; // 'retention' | 'events'
@@ -882,6 +883,39 @@
       );
     }
 
+    const totalRawStreams = rows.length;
+    let duplicateStreamsCount = 0;
+
+    if (dedupeListenersSetting) {
+      const ipGroupMap = new Map();
+      for (const r of rows) {
+        if (!ipGroupMap.has(r.ip)) {
+          ipGroupMap.set(r.ip, {
+            ...r,
+            streams: [r],
+            allClientIds: [String(r.clientId)],
+          });
+        } else {
+          const group = ipGroupMap.get(r.ip);
+          group.streams.push(r);
+          group.allClientIds.push(String(r.clientId));
+          duplicateStreamsCount++;
+          // Keep highest connected seconds as primary row representation
+          if (r.liveConnectedSeconds > group.liveConnectedSeconds) {
+            group.liveConnectedSeconds = r.liveConnectedSeconds;
+            group.connectedSeconds = r.connectedSeconds;
+            group.clientId = r.clientId;
+            if (r.ua?.player && r.ua.player !== 'Audio Client') {
+              group.ua = r.ua;
+              group.userAgent = r.userAgent;
+            }
+          }
+          group.connectionsFromIp = group.streams.length;
+        }
+      }
+      rows = Array.from(ipGroupMap.values());
+    }
+
     rows.sort((a, b) => {
       let va, vb;
       switch (tableSortField) {
@@ -913,11 +947,22 @@
     });
 
     if (countBadge) {
-      if (excludeBotsSetting) {
-        const botCount = (dashboardState.kpis?.botListenersCount ?? (dashboardState.listeners || []).filter(l => l.isBot).length);
-        countBadge.textContent = `${rows.length} human listeners (${botCount} bots excluded)`;
+      if (dedupeListenersSetting) {
+        if (excludeBotsSetting) {
+          const botCount = (dashboardState.kpis?.botListenersCount ?? (dashboardState.listeners || []).filter(l => l.isBot).length);
+          const streamInfo = duplicateStreamsCount > 0 ? ` (${totalRawStreams} streams, ${botCount} bots excluded)` : ` (${botCount} bots excluded)`;
+          countBadge.textContent = `${rows.length} unique human ${rows.length === 1 ? 'listener' : 'listeners'}${streamInfo}`;
+        } else {
+          const streamInfo = duplicateStreamsCount > 0 ? ` (${totalRawStreams} streams total)` : '';
+          countBadge.textContent = `${rows.length} unique ${rows.length === 1 ? 'listener' : 'listeners'}${streamInfo}`;
+        }
       } else {
-        countBadge.textContent = `${rows.length} of ${dashboardState.listeners.length} clients`;
+        if (excludeBotsSetting) {
+          const botCount = (dashboardState.kpis?.botListenersCount ?? (dashboardState.listeners || []).filter(l => l.isBot).length);
+          countBadge.textContent = `${rows.length} human connections (${botCount} bots excluded)`;
+        } else {
+          countBadge.textContent = `${rows.length} of ${dashboardState.listeners.length} clients`;
+        }
       }
     }
 
@@ -936,10 +981,14 @@
       .map(r => {
         const sec = r.liveConnectedSeconds;
         const durClass = sec >= 3600 ? 'long' : sec >= 900 ? 'medium' : '';
-        const dupHtml =
-          r.connectionsFromIp > 1
-            ? `<span class="dup-badge" title="${r.connectionsFromIp} simultaneous connections from this IP">${r.connectionsFromIp}x</span>`
-            : '';
+        const streamCount = r.streams ? r.streams.length : (r.connectionsFromIp || 1);
+        let dupHtml = '';
+        if (streamCount > 1) {
+          const streamDetails = (r.streams || [r])
+            .map((s, idx) => `• Stream #${idx + 1}: ${formatDurationClock(s.liveConnectedSeconds)} (${s.liveConnectedSeconds}s) [Client #${s.clientId}]`)
+            .join('&#10;');
+          dupHtml = `<span class="dup-badge" title="${streamCount} simultaneous streams from this IP:&#10;${streamDetails}">${streamCount}x</span>`;
+        }
         const isBot = Boolean(r.isBot || r.isManualBot || r.ua?.isRipper || r.ua?.category === 'Bot / Ripper');
         const catClass = isBot ? 'ripper' : '';
         const botBtnHtml = isBot
@@ -947,6 +996,12 @@
           : `<button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(r.ip)}" data-bot-state="0" title="Flag this IP as a Bot or Stream Ripper">🤖 Mark Bot</button>`;
         const friendlyBadgeHtml = r.friendlyName
           ? `<button type="button" data-inspect-ip="${escapeHtml(r.ip)}" style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.42);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600;cursor:pointer;text-align:left" title="Click to edit friendly name or inspect IP">${escapeHtml(r.friendlyName)}</button>`
+          : '';
+
+        const allIdsAttr = (r.allClientIds || [String(r.clientId)]).join(',');
+        const kickLabel = streamCount > 1 ? `Kick All (${streamCount})` : 'Kick';
+        const extraStreamNote = streamCount > 1
+          ? `<div style="font-size:10.5px;color:var(--accent-amber);margin-top:2px;font-family:var(--font-mono)" title="${streamCount} simultaneous connections from this IP">⚡ ${streamCount} active streams</div>`
           : '';
 
         return `
@@ -978,6 +1033,7 @@
                 ${formatDurationClock(sec)}
               </span>
               <span class="mono" style="font-size:11px;color:var(--text-muted);margin-left:6px">(${sec}s)</span>
+              ${extraStreamNote}
             </td>
             <td class="ua-cell">
               <div class="ua-parsed-row">
@@ -995,7 +1051,7 @@
               <div style="display:flex;align-items:center;gap:6px">
                 <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(r.ip)}" title="Set friendly name &amp; view history">Name / History</button>
                 ${botBtnHtml}
-                <button type="button" class="btn btn-danger-ghost" data-kick-id="${escapeHtml(r.clientId)}" data-kick-ip="${escapeHtml(r.ip)}">Kick</button>
+                <button type="button" class="btn btn-danger-ghost" data-kick-id="${escapeHtml(r.clientId)}" data-kick-ip="${escapeHtml(r.ip)}" data-client-ids="${escapeHtml(allIdsAttr)}" title="Disconnect listener from Icecast">${kickLabel}</button>
               </div>
             </td>
           </tr>
@@ -1416,17 +1472,19 @@
       if (kickBtn) {
         const clientId = kickBtn.getAttribute('data-kick-id');
         const ip = kickBtn.getAttribute('data-kick-ip');
+        const clientIdsAttr = kickBtn.getAttribute('data-client-ids');
+        const clientIds = clientIdsAttr ? clientIdsAttr.split(',').filter(Boolean) : (clientId ? [clientId] : []);
         kickBtn.disabled = true;
         kickBtn.textContent = 'Kicking...';
         try {
           const res = await fetch('/api/kick', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clientId, ip }),
+            body: JSON.stringify({ clientId, clientIds, ip }),
           });
           const data = await res.json();
           if (data.ok) {
-            showToast(data.message || `Disconnected client #${clientId}`);
+            showToast(data.message || `Disconnected listener ${ip || clientId}`);
             fetchDashboard();
           } else {
             showToast(`Kick error: ${data.error}`);
@@ -1440,6 +1498,25 @@
         }
       }
     });
+
+    // Deduplicate Listeners toggle in table toolbar
+    const dedupeCb = document.getElementById('dedupeListenersCheckbox');
+    const dedupeWrap = document.getElementById('dedupeToggleWrap');
+    if (dedupeCb) {
+      dedupeCb.checked = dedupeListenersSetting;
+      if (dedupeWrap) dedupeWrap.classList.toggle('checked', dedupeListenersSetting);
+      dedupeCb.addEventListener('change', () => {
+        dedupeListenersSetting = dedupeCb.checked;
+        localStorage.setItem('ozonecast_dedupe_listeners', dedupeListenersSetting ? '1' : '0');
+        if (dedupeWrap) dedupeWrap.classList.toggle('checked', dedupeListenersSetting);
+        showToast(
+          dedupeListenersSetting
+            ? '✨ Grouping simultaneous connections (1 row per listener)'
+            : '📡 Showing all raw Icecast client connections'
+        );
+        renderClientsTable();
+      });
+    }
 
     // Exclude Bots checkbox toggle next to Icecast Server button
     const excludeBotsCb = document.getElementById('excludeBotsCheckbox');
@@ -1496,19 +1573,52 @@
       showToast(`Polling interval updated to ${sec}s`);
     });
 
+    // Helper: deduplicate raw listeners array
+    function getDeduplicatedListeners(listeners) {
+      const ipMap = new Map();
+      for (const l of listeners || []) {
+        if (!ipMap.has(l.ip)) {
+          ipMap.set(l.ip, {
+            ...l,
+            streams: [l],
+            allClientIds: [String(l.clientId)],
+            connectionsFromIp: l.connectionsFromIp || 1,
+          });
+        } else {
+          const group = ipMap.get(l.ip);
+          group.streams.push(l);
+          group.allClientIds.push(String(l.clientId));
+          if ((l.connectedSeconds || 0) > (group.connectedSeconds || 0)) {
+            group.connectedSeconds = l.connectedSeconds;
+            group.clientId = l.clientId;
+            if (l.ua?.player && l.ua.player !== 'Audio Client') {
+              group.ua = l.ua;
+              group.userAgent = l.userAgent;
+            }
+          }
+          group.connectionsFromIp = group.streams.length;
+        }
+      }
+      return Array.from(ipMap.values());
+    }
+
     // Export CSV & JSON
     document.getElementById('exportCsvBtn')?.addEventListener('click', () => {
       if (!dashboardState || !dashboardState.listeners) return;
-      const headers = ['ClientID', 'IP', 'CountryCode', 'Country', 'City', 'ConnectedSeconds', 'Player', 'Category', 'OS', 'Mount', 'UserAgent'];
+      const headers = ['ClientID', 'IP', 'FriendlyName', 'CountryCode', 'Country', 'City', 'ConnectedSeconds', 'ActiveStreams', 'Player', 'Category', 'OS', 'Mount', 'UserAgent'];
       const lines = [headers.join(',')];
-      for (const l of dashboardState.listeners) {
+      let exportRows = dedupeListenersSetting ? getDeduplicatedListeners(dashboardState.listeners) : dashboardState.listeners;
+      if (excludeBotsSetting) exportRows = exportRows.filter(r => !r.isBot);
+      for (const l of exportRows) {
         const row = [
           l.clientId,
           l.ip,
+          `"${(l.friendlyName || '').replace(/"/g, '""')}"`,
           l.geo?.countryCode || '',
           `"${(l.geo?.countryName || '').replace(/"/g, '""')}"`,
           `"${(l.geo?.city || '').replace(/"/g, '""')}"`,
           l.connectedSeconds,
+          l.connectionsFromIp || (l.streams ? l.streams.length : 1),
           `"${(l.ua?.player || '').replace(/"/g, '""')}"`,
           `"${(l.ua?.category || '').replace(/"/g, '""')}"`,
           `"${(l.ua?.os || '').replace(/"/g, '""')}"`,
