@@ -11,10 +11,8 @@ COPY server.js ./
 COPY src ./src
 COPY public ./public
 
-# Create persistent SQLite data directory
-RUN mkdir -p /app/data && chown -R node:node /app
-
-USER node
+# Create persistent SQLite data directory with full permissions for Synology NAS bind mounts
+RUN mkdir -p /app/data && chmod -R 777 /app/data
 
 ENV NODE_ENV=production
 ENV PORT=3000

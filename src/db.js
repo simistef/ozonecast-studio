@@ -2,16 +2,33 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+function openDatabaseWithFallback() {
+  const primaryDir = path.join(__dirname, '..', 'data');
+  const fallbackDir = '/tmp/ozonecast-data';
+
+  for (const dir of [primaryDir, fallbackDir]) {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const dbPath = path.join(dir, 'ozonecast.sqlite');
+      const instance = new DatabaseSync(dbPath);
+      try {
+        instance.exec('PRAGMA journal_mode = WAL;');
+      } catch (_) {
+        instance.exec('PRAGMA journal_mode = DELETE;');
+      }
+      instance.exec('PRAGMA synchronous = NORMAL;');
+      console.log(`SQLite initialized at ${dbPath}`);
+      return instance;
+    } catch (err) {
+      console.warn(`Could not open SQLite in ${dir}: ${err.message}`);
+    }
+  }
+  return new DatabaseSync(':memory:');
 }
 
-const DB_PATH = path.join(DATA_DIR, 'ozonecast.sqlite');
-const db = new DatabaseSync(DB_PATH);
-
-db.exec('PRAGMA journal_mode = WAL;');
-db.exec('PRAGMA synchronous = NORMAL;');
+const db = openDatabaseWithFallback();
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS config (

@@ -642,63 +642,117 @@ app.post('/api/test-connection', async (req, res) => {
   }
 });
 
-// Ensure TLS Certificate exists in data/ for native HTTPS server on port 3443
+// Built-in 10-year self-signed TLS certificate & key fallback so HTTPS (port 3443)
+// works out-of-the-box inside slim Docker containers even without /usr/bin/openssl installed.
+const BUILTIN_TLS_CERT = `-----BEGIN CERTIFICATE-----
+MIIDnzCCAoegAwIBAgIUf5hH1lpr4uzD9aHYpjODs256zqEwDQYJKoZIhvcNAQEL
+BQAwXzELMAkGA1UEBhMCUk8xEDAOBgNVBAgMB1ByYWhvdmExETAPBgNVBAcMCFBs
+b2llc3RpMREwDwYDVQQKDAhPWk9ORS5GTTEYMBYGA1UEAwwPb3pvbmVjYXN0Lmxv
+Y2FsMB4XDTI2MTEwNzE4MjkxMVoXDTM2MTEwNDE4MjkxMVowXzELMAkGA1UEBhMC
+Uk8xEDAOBgNVBAgMB1ByYWhvdmExETAPBgNVBAcMCFBsb2llc3RpMREwDwYDVQQK
+DAhPWk9ORS5GTTEYMBYGA1UEAwwPb3pvbmVjYXN0LmxvY2FsMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjEuZPDBM5O8K4jIVdxPbbDEp8PpdVQjcQGVa
+KYAncEl6YqLqdF0e42rE1HA6BxoFnSgj+tVUv2kE3VA+czIPIkzrtXZx/9Bd9auW
+wgUWtKCicdl0ybKrzbRfblwtPmwN37BowUBxC5QQjTtAiqH/lP2apIrj4QjK8FnN
+W8w7OHJ/dTA3WPvz6JcTLwaPG2/eeCDhNYbFkSeFLBdBFMrV67hJfJWsJIT5g5Q8
+RKs+X/2MDvQpp7NmALg2kfRLCMgi3pJU3KOqENCLV3ABSCeb/RfVKw3P4fHfmuoM
+z6CfPQ8kX/tOtkYZzOfCeklzpdXB8XJKBuc5FitXdX5jgkxvOwIDAQABo1MwUTAd
+BgNVHQ4EFgQUwTsnjr/iS8Q8e9Qpb784Oxv5tOEwHwYDVR0jBBgwFoAUwTsnjr/i
+S8Q8e9Qpb784Oxv5tOEwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOC
+AQEAS/rinptksg+dLjRLnoIUQR3byL4Bz+qM1/NKrPmzay9mN65WShhjTaBOwQ6c
+w9ZKgF7GbcjQ/nxk97Ey4uNxnZ/WmLzv2J83eEnbjTdLfjF7YO8A8kj6xJgl+1uF
+RzQMe+JtYfOBLJW2xvvSfpGXzsVL3yauHeANxxMFX2wJQPqIgltbQbSAoWv9STbX
+cqpzb3WLo7jE0uAwa37BlcTaHXwW2XLsj0N2dQsqVZgO/omdM5D+tBC4cDNsAY+B
+k+vEI8bfoBxQGGZDOxGGROWFFIFCBcIcn2DtjDcPbl/XwHTbsZQw6BMkYNi2VsmA
+yv5sANoCaYYWUicVbHycBdHAFw==
+-----END CERTIFICATE-----`;
+
+const BUILTIN_TLS_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCMS5k8MEzk7wri
+MhV3E9tsMSnw+l1VCNxAZVopgCdwSXpioup0XR7jasTUcDoHGgWdKCP61VS/aQTd
+UD5zMg8iTOu1dnH/0F31q5bCBRa0oKJx2XTJsqvNtF9uXC0+bA3fsGjBQHELlBCN
+O0CKof+U/ZqkiuPhCMrwWc1bzDs4cn91MDdY+/PolxMvBo8bb954IOE1hsWRJ4Us
+F0EUytXruEl8lawkhPmDlDxEqz5f/YwO9Cmns2YAuDaR9EsIyCLeklTco6oQ0ItX
+cAFIJ5v9F9UrDc/h8d+a6gzPoJ89DyRf+062RhnM58J6SXOl1cHxckoG5zkWK1d1
+fmOCTG87AgMBAAECggEADI0iNz4eUFL0dyUXl4YkGMtTNGxprNcJ7AxFOIuZu6l5
+31jc6dkqOhqjY7AV+OxX4+X4m2hk2GpbADkSxTfiyQ+hp3k3x1+gWv9lZuk79/VG
+YzIbCS/IwAgANlLdIgWvvhCTEUr5x26RMS7Ds5i8/AWDmsSUO4iPrgNoDxY37BuW
++Pb9SChXcvec0DT9zhgFGcRGdnF0blvKffc/kgEbCd14l4OoKZuwEpS3bd2BB83k
+s7F9p2sfJ7EThalO0qMXHaWTpVo0TrhRyTuHf8vcUmeT/Jnr5KtCAPt5OUtidZRD
+qHz2nf27/jbkVVvnAxc0CTBdlJGyPSgVqhYTClXWrQKBgQDEUIYgqiUojRaZPdXp
+qQm94gWx8i2fwLxsMhLwmkMQNe45tEhke3heVJ90yCwqQUAKSzNjXLMWCWUCdO7i
+Vdrb6/H9LemW3aOxMiJhFM9XrDe3EQ12F9VYZ7QiM4yPjPb7et3/Z4pdox1qSqod
+kgmhJLfapFoS58nN7viEbwVYlQKBgQC28wHiCMN/iemNX124TEvr3bQStn80enHT
+/kzBiegJ7TfjmMHX8/sAmXcccUkNCIbVgWCzvYt38nuiBeqlBV2Dz2HinLVFvhEr
+fmlmRoLtWcPfbHKBoKPd5VUY0mlYP8U0kihq0vqNJfmXpycLbfGOS5JmQyr30XBP
+aR7UcK8kjwKBgBaDlZ5RZQmNhLX2XX36oN9h+H075PeZRwKxi3KEfoRxauy7PEIp
+1tgapF7kRgxih1Gm5jHTA8bXNPpfJrZWWk82c/4xMcTXjlpYAZFYrZ7EZW9dSUnt
+2c3VttblSo18ASc+JA+SdE/g0RLLlU7m3KvaZitxBdN9OaugaGfnw5kxAoGAKSFt
+FPI/cZcB6QS9v0d38ik/6M0awCOfH7gWbZShlEm+vO6E9hYmIjZebwiREdsO5UVX
+BlHg3zCm1wBZhow0QAQJz7bHkkxu88ZRz+qeWNpLjRmGjNoevS5n+VKk2HBN18nc
+SFfyeHVHLe8oegtXuVQIL/F94YU2qMPLaJuE5MUCgYABY5Q14+X+PBA45ageRBp5
+6G4YBxNt9MdHufGYBN53MvlimpIgacFJTERm09rQCAQhewbECWAh9squYvnnSh1J
+7WxHiymL78YghXBSi86j8rs6YI6rEJQad9FVr3t3z67zvSLWX+t17ccl3E2TBwVH
+rzoJmLcBNELSgBqJT2NMFg==
+-----END PRIVATE KEY-----`;
+
 function ensureTlsCertificates() {
   const dataDir = path.join(__dirname, 'data');
   const certPath = process.env.TLS_CERT_PATH || path.join(dataDir, 'tls-cert.pem');
   const keyPath = process.env.TLS_KEY_PATH || path.join(dataDir, 'tls-key.pem');
 
-  if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+  if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     try {
-      execFileSync(
-        'openssl',
-        [
-          'req',
-          '-x509',
-          '-newkey',
-          'rsa:2048',
-          '-nodes',
-          '-sha256',
-          '-days',
-          '3650',
-          '-subj',
-          '/C=RO/ST=Prahova/L=Ploiesti/O=OZONE.FM/CN=ozonecast.local',
-          '-keyout',
-          keyPath,
-          '-out',
-          certPath,
-        ],
-        { stdio: 'ignore' }
-      );
-    } catch (err) {
-      console.warn('Could not auto-generate self-signed TLS cert:', err.message);
-      return null;
-    }
+      return {
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+      };
+    } catch (_) {}
   }
 
   try {
-    return {
-      key: fs.readFileSync(keyPath),
-      cert: fs.readFileSync(certPath),
-    };
-  } catch (_) {
-    return null;
-  }
+    fs.writeFileSync(certPath, BUILTIN_TLS_CERT, 'utf8');
+    fs.writeFileSync(keyPath, BUILTIN_TLS_KEY, 'utf8');
+  } catch (_) {}
+
+  return {
+    key: BUILTIN_TLS_KEY,
+    cert: BUILTIN_TLS_CERT,
+  };
 }
 
-// Start initial poll & HTTP + HTTPS servers
+// Graceful shutdown handlers so Synology Container Manager does not log exit 143 as an unexpected crash
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully...');
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  process.exit(0);
+});
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception (kept alive):', err);
+});
+process.on('unhandledRejection', err => {
+  console.error('Unhandled rejection (kept alive):', err);
+});
+
+// Start HTTP + HTTPS servers immediately so container ports & healthcheck are ready without waiting on external poll
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`OzoneCast Telemetry Server (HTTP)  running on http://0.0.0.0:${PORT}`);
+});
+
+try {
+  const tlsCreds = ensureTlsCertificates();
+  https.createServer(tlsCreds, app).listen(HTTPS_PORT, '0.0.0.0', () => {
+    console.log(`OzoneCast Telemetry Server (HTTPS) running on https://0.0.0.0:${HTTPS_PORT}`);
+  });
+} catch (err) {
+  console.error('HTTPS server error:', err.message);
+}
+
 executePollCycle()
   .catch(err => console.error('Initial poll failed:', err.message))
   .finally(() => {
     schedulePoller();
-    app.listen(PORT, () => {
-      console.log(`OzoneCast Telemetry Server (HTTP)  running on http://0.0.0.0:${PORT}`);
-    });
-
-    const tlsCreds = ensureTlsCertificates();
-    if (tlsCreds) {
-      https.createServer(tlsCreds, app).listen(HTTPS_PORT, () => {
-        console.log(`OzoneCast Telemetry Server (HTTPS) running on https://0.0.0.0:${HTTPS_PORT}`);
-      });
-    }
   });
