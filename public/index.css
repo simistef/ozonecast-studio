@@ -681,6 +681,28 @@ button, input, select, textarea {
   height: 255px;
 }
 
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: hsla(214, 28%, 9%, 0.97);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65);
+  z-index: 20;
+  min-width: 170px;
+  transform: translate(-50%, -100%);
+  margin-top: -12px;
+  transition: opacity 0.12s ease;
+  backdrop-filter: blur(8px);
+}
+
+.chart-tooltip.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .time-of-day-chart-wrap {
   position: relative;
   width: 100%;

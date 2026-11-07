@@ -575,6 +575,41 @@
     }
   }
 
+  let currentHistoryData = [];
+  let historyHoverIdx = null;
+
+  function getDynamicYScale(rawMax) {
+    if (rawMax <= 1) return { maxVal: 2, steps: 2 };
+    if (rawMax <= 2) return { maxVal: 3, steps: 3 };
+    if (rawMax <= 4) return { maxVal: 4, steps: 4 };
+    if (rawMax <= 6) return { maxVal: 8, steps: 4 };
+    if (rawMax <= 8) return { maxVal: 10, steps: 5 };
+    if (rawMax <= 10) return { maxVal: 12, steps: 4 };
+    if (rawMax <= 12) return { maxVal: 15, steps: 5 };
+    if (rawMax <= 16) return { maxVal: 20, steps: 4 };
+    if (rawMax <= 20) return { maxVal: 24, steps: 4 };
+    if (rawMax <= 25) return { maxVal: 30, steps: 5 };
+    if (rawMax <= 32) return { maxVal: 40, steps: 4 };
+    if (rawMax <= 45) return { maxVal: 50, steps: 5 };
+    if (rawMax <= 60) return { maxVal: 75, steps: 5 };
+    if (rawMax <= 80) return { maxVal: 100, steps: 4 };
+    if (rawMax <= 100) return { maxVal: 120, steps: 4 };
+
+    // Generic formula for larger numbers
+    const targetSteps = 4;
+    const roughStep = (rawMax * 1.15) / targetSteps;
+    const pow = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const fraction = roughStep / pow;
+    let niceFactor = 1;
+    if (fraction > 5) niceFactor = 10;
+    else if (fraction > 2) niceFactor = 5;
+    else if (fraction > 1) niceFactor = 2;
+    const step = niceFactor * pow;
+    const maxVal = Math.ceil((rawMax * 1.08) / step) * step;
+    const steps = Math.round(maxVal / step);
+    return { maxVal, steps };
+  }
+
   function renderHistoryChart(historySeries) {
     const canvas = document.getElementById('historyChartCanvas');
     if (!canvas) return;
@@ -589,11 +624,14 @@
     const h = rect.height;
     ctx.clearRect(0, 0, w, h);
 
-    const pts = Array.isArray(historySeries) ? historySeries : [];
+    currentHistoryData = Array.isArray(historySeries) ? historySeries : [];
+    const pts = currentHistoryData;
     if (pts.length === 0) {
       ctx.fillStyle = 'hsl(214, 12%, 48%)';
       ctx.font = '12px Inter, sans-serif';
       ctx.fillText('Collecting time-series snapshots...', 20, h / 2);
+      const tip = document.getElementById('historyTooltip');
+      if (tip) tip.classList.add('hidden');
       return;
     }
 
@@ -604,10 +642,11 @@
     const plotW = w - padLeft - padRight;
     const plotH = h - padTop - padBottom;
 
-    const maxVal = Math.max(10, ...pts.map(p => Math.max(p.listener_count || 0, p.peak_reported || 0))) * 1.15;
+    // Scale dynamically to the actual peak in the specified interval
+    const intervalMax = Math.max(1, ...pts.map(p => Math.max(Number(p.listener_count) || 0, Number(p.unique_ips) || 0)));
+    const { maxVal, steps } = getDynamicYScale(intervalMax);
 
     // Horizontal reference lines
-    const steps = 4;
     ctx.strokeStyle = 'hsla(210, 20%, 90%, 0.06)';
     ctx.lineWidth = 1;
     ctx.fillStyle = 'hsl(214, 12%, 48%)';
@@ -626,7 +665,7 @@
 
     const getX = idx =>
       pts.length === 1 ? padLeft + plotW / 2 : padLeft + (idx / (pts.length - 1)) * plotW;
-    const getY = val => padTop + plotH - (Math.min(maxVal, val) / maxVal) * plotH;
+    const getY = val => padTop + plotH - (Math.min(maxVal, Math.max(0, val)) / maxVal) * plotH;
 
     // Draw area fill under listener_count curve
     const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
@@ -682,6 +721,108 @@
       const x = getX(idx);
       const label = new Date(p.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       ctx.fillText(label, x, h - 6);
+    }
+
+    // Hover Tracking Overlay & Tooltip
+    const tooltip = document.getElementById('historyTooltip');
+    if (historyHoverIdx !== null && pts[historyHoverIdx]) {
+      const p = pts[historyHoverIdx];
+      const ptX = getX(historyHoverIdx);
+      const ptY1 = getY(p.listener_count);
+      const ptY2 = getY(p.unique_ips || p.listener_count);
+
+      // 1. Vertical guideline
+      ctx.beginPath();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'hsla(210, 20%, 90%, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.moveTo(ptX, padTop);
+      ctx.lineTo(ptX, padTop + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 2. Active Listeners dot (amber)
+      ctx.beginPath();
+      ctx.arc(ptX, ptY1, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(28, 95%, 56%, 0.32)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ptX, ptY1, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsl(28, 95%, 56%)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ptX, ptY1, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // 3. Unique IPs dot (cyan)
+      ctx.beginPath();
+      ctx.arc(ptX, ptY2, 5.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsla(196, 88%, 54%, 0.32)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ptX, ptY2, 3.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'hsl(196, 88%, 54%)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ptX, ptY2, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // 4. Update and position HTML tooltip
+      if (tooltip) {
+        const isMultiDay = selectedRangeMinutes > 1440;
+        const timeStr = isMultiDay
+          ? new Date(p.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : new Date(p.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        tooltip.innerHTML = `
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.04em;margin-bottom:6px">
+            ${timeStr}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:3px">
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:12px">
+              <span style="width:8px;height:8px;border-radius:50%;background:hsl(28,95%,56%);display:inline-block"></span>
+              Active Listeners
+            </span>
+            <strong style="color:var(--accent-amber);font-family:'JetBrains Mono',monospace;font-size:13px">${p.listener_count}</strong>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:12px">
+              <span style="width:8px;height:2px;background:hsl(196,88%,54%);display:inline-block"></span>
+              Unique IPs
+            </span>
+            <strong style="color:hsl(196,88%,54%);font-family:'JetBrains Mono',monospace;font-size:13px">${p.unique_ips || p.listener_count}</strong>
+          </div>
+          ${
+            p.current_track
+              ? `
+          <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle);font-size:11px;color:var(--text-secondary);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(p.current_track)}">
+            🎵 ${escapeHtml(p.current_track)}
+          </div>
+          `
+              : ''
+          }
+        `;
+
+        const containerW = rect.width;
+        let left = Math.max(90, Math.min(containerW - 90, ptX));
+
+        if (ptY1 < 75) {
+          tooltip.style.transform = 'translate(-50%, 0)';
+          tooltip.style.marginTop = '14px';
+          tooltip.style.left = left + 'px';
+          tooltip.style.top = ptY1 + 'px';
+        } else {
+          tooltip.style.transform = 'translate(-50%, -100%)';
+          tooltip.style.marginTop = '-12px';
+          tooltip.style.left = left + 'px';
+          tooltip.style.top = ptY1 + 'px';
+        }
+        tooltip.classList.remove('hidden');
+      }
+    } else if (tooltip) {
+      tooltip.classList.add('hidden');
     }
   }
 
@@ -1037,9 +1178,57 @@
         document.querySelectorAll('#historyRangeTabs .seg-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         selectedRangeMinutes = parseInt(btn.getAttribute('data-range') || '60', 10);
+        historyHoverIdx = null;
         fetchDashboard();
       });
     });
+
+    // Historical Chart Hover Interaction
+    const histCanvas = document.getElementById('historyChartCanvas');
+    const histTooltip = document.getElementById('historyTooltip');
+
+    function handleHistPointer(e) {
+      if (!histCanvas || currentHistoryData.length === 0) return;
+      const rect = histCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      const padLeft = 38;
+      const padRight = 14;
+      const plotW = rect.width - padLeft - padRight;
+
+      if (x < padLeft - 10 || x > rect.width - padRight + 10 || y < 0 || y > rect.height) {
+        handleHistLeave();
+        return;
+      }
+
+      const frac = Math.max(0, Math.min(1, (x - padLeft) / Math.max(1, plotW)));
+      const nearestIdx = Math.round(frac * (currentHistoryData.length - 1));
+
+      if (historyHoverIdx !== nearestIdx) {
+        historyHoverIdx = nearestIdx;
+        renderHistoryChart(currentHistoryData);
+      }
+    }
+
+    function handleHistLeave() {
+      if (historyHoverIdx !== null) {
+        historyHoverIdx = null;
+        renderHistoryChart(currentHistoryData);
+      }
+      if (histTooltip) {
+        histTooltip.classList.add('hidden');
+      }
+    }
+
+    if (histCanvas) {
+      histCanvas.addEventListener('mousemove', handleHistPointer);
+      histCanvas.addEventListener('mouseleave', handleHistLeave);
+      histCanvas.addEventListener('touchmove', handleHistPointer, { passive: true });
+      histCanvas.addEventListener('touchend', handleHistLeave);
+    }
 
     // Retention vs Event Feed Tabs
     document.getElementById('tabRetentionBtn')?.addEventListener('click', e => {
