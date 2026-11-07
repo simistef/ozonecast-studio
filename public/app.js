@@ -319,14 +319,32 @@
   function renderTopReturningListeners(topList, kpis) {
     const container = document.getElementById('topReturningList');
     const tag = document.getElementById('returningTotalTag');
+    const quickSelect = document.getElementById('returningMinAvgQuickSelect');
+    const minAvgSec =
+      kpis && Number.isFinite(Number(kpis.returningMinAvgSec))
+        ? Number(kpis.returningMinAvgSec)
+        : 60;
+
+    if (quickSelect) {
+      const strVal = String(minAvgSec);
+      const exists = Array.from(quickSelect.options).some(opt => opt.value === strVal);
+      if (!exists) {
+        const customOpt = document.createElement('option');
+        customOpt.value = strVal;
+        customOpt.textContent = `Min Avg ≥ ${formatDurationHuman(minAvgSec)}`;
+        quickSelect.appendChild(customOpt);
+      }
+      quickSelect.value = strVal;
+    }
+
     if (tag && kpis) {
-      tag.textContent = `${kpis.returningListenerCount || (topList || []).length} Repeat IPs`;
+      tag.textContent = `${kpis.returningListenerCount ?? (topList || []).length} Repeat IPs`;
     }
     if (!container) return;
 
     const items = (topList || []).slice(0, 5);
     if (items.length === 0) {
-      container.innerHTML = `<div style="color:var(--text-muted);font-size:12.5px">Collecting returning listener sessions...</div>`;
+      container.innerHTML = `<div style="color:var(--text-muted);font-size:12.5px">No returning human listeners with average session ≥ ${formatDurationHuman(minAvgSec)} yet (bots excluded).</div>`;
       return;
     }
 
@@ -983,7 +1001,19 @@
       if (copyBtn) {
         const ip = copyBtn.getAttribute('data-copy-ip');
         try {
-          await navigator.clipboard.writeText(ip);
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(ip);
+          } else {
+            const ta = document.createElement('textarea');
+            ta.value = ip;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+          }
           showToast(`Copied IP ${ip} to clipboard`);
         } catch (_) {
           showToast(`IP: ${ip}`);
@@ -1029,6 +1059,18 @@
     document.getElementById('retryLiveBtn')?.addEventListener('click', async () => {
       showToast('Probing live.ozone.fm:8443...');
       await fetch('/api/poll', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forceLive: true }) });
+      await fetchDashboard();
+    });
+
+    // Returning Listeners Min Avg Duration quick selector
+    document.getElementById('returningMinAvgQuickSelect')?.addEventListener('change', async e => {
+      const minSec = Math.max(0, parseInt(e.target.value, 10) || 0);
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returningMinAvgSec: minSec }),
+      });
+      showToast(`Top Returning filter updated: Min Avg ≥ ${formatDurationHuman(minSec)}`);
       await fetchDashboard();
     });
 
@@ -1116,6 +1158,10 @@
         document.getElementById('cfgStationName').value = data.config.stationName || 'OZONE.FM';
         document.getElementById('cfgSourceMode').value = data.config.sourceMode || 'auto';
         document.getElementById('cfgMaxCapacity').value = data.config.maxListenersCapacity || 500;
+        document.getElementById('cfgReturningMinAvgSec').value =
+          Number.isFinite(Number(data.config.returningMinAvgSec)) ? Number(data.config.returningMinAvgSec) : 60;
+        document.getElementById('cfgReturningExcludeBots').checked = data.config.returningExcludeBots !== false;
+        document.getElementById('cfgRequireDashboardAuth').checked = data.config.requireDashboardAuth !== false;
         document.getElementById('cfgIgnoreTls').checked = data.config.ignoreTlsErrors !== false;
       }
       document.getElementById('testConnectionResultBox').style.display = 'none';
@@ -1160,6 +1206,7 @@
 
     document.getElementById('settingsForm')?.addEventListener('submit', async e => {
       e.preventDefault();
+      const minAvgRaw = parseInt(document.getElementById('cfgReturningMinAvgSec').value, 10);
       const payload = {
         baseUrl: document.getElementById('cfgBaseUrl').value,
         mount: document.getElementById('cfgMount').value,
@@ -1168,6 +1215,9 @@
         stationName: document.getElementById('cfgStationName').value,
         sourceMode: document.getElementById('cfgSourceMode').value,
         maxListenersCapacity: parseInt(document.getElementById('cfgMaxCapacity').value, 10) || 500,
+        returningMinAvgSec: Number.isFinite(minAvgRaw) ? Math.max(0, minAvgRaw) : 60,
+        returningExcludeBots: document.getElementById('cfgReturningExcludeBots').checked,
+        requireDashboardAuth: document.getElementById('cfgRequireDashboardAuth').checked,
         ignoreTlsErrors: document.getElementById('cfgIgnoreTls').checked,
       };
       await fetch('/api/config', {
@@ -1176,7 +1226,7 @@
         body: JSON.stringify(payload),
       });
       closeSettings();
-      showToast('Icecast configuration saved');
+      showToast('Configuration saved');
       await fetchDashboard();
     });
 

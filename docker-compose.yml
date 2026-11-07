@@ -7,9 +7,11 @@ services:
     restart: unless-stopped
     ports:
       - "3080:3000"
+      - "3443:3443"
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - HTTPS_PORT=3443
       - TZ=Europe/Bucharest
       - ICECAST_URL=https://live.ozone.fm:8443
       - ICECAST_MOUNT=/listen
@@ -20,5 +22,8 @@ services:
       - SOURCE_MODE=live
       - STATION_NAME=OZONE.FM
       - MAX_LISTENERS=500
+      - RETURNING_MIN_AVG_SEC=60
+      - RETURNING_EXCLUDE_BOTS=true
+      - REQUIRE_DASHBOARD_AUTH=true
     volumes:
       - ./data:/app/data

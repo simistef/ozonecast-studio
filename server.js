@@ -1,4 +1,8 @@
+const fs = require('node:fs');
 const path = require('node:path');
+const https = require('node:https');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const express = require('express');
 const {
   getConfig,
@@ -20,6 +24,44 @@ const { fetchLiveIcecastTelemetry, kickLiveIcecastClient } = require('./src/icec
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HTTPS_PORT = parseInt(process.env.HTTPS_PORT || '3443', 10) || 3443;
+
+function safeStringEqual(a, b) {
+  const bufA = Buffer.from(String(a || ''), 'utf8');
+  const bufB = Buffer.from(String(b || ''), 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Docker healthcheck endpoint (unauthenticated)
+app.get(['/api/health', '/api/healthz'], (_req, res) => {
+  res.json({ ok: true, status: 'healthy' });
+});
+
+// Protect dashboard & API with the same username and password as Icecast Admin
+app.use((req, res, next) => {
+  const cfg = getConfig();
+  if (cfg.requireDashboardAuth === false) return next();
+
+  const expectedUser = cfg.username || 'admin';
+  const expectedPass = cfg.password || 'Wo10vn57zomq?';
+
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Basic ')) {
+    const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
+    const sepIdx = decoded.indexOf(':');
+    if (sepIdx !== -1) {
+      const user = decoded.slice(0, sepIdx);
+      const pass = decoded.slice(sepIdx + 1);
+      if (safeStringEqual(user, expectedUser) && safeStringEqual(pass, expectedPass)) {
+        return next();
+      }
+    }
+  }
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="OzoneCast Studio — OZONE.FM Admin", charset="UTF-8"');
+  return res.status(401).send('Authentication required: Enter your Icecast Admin username and password.');
+});
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -384,6 +426,8 @@ app.get('/api/dashboard', async (req, res) => {
       uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdowns.countries.length),
       totalListeningHours24h: Math.max(stats24h.totalListeningHours24h, breakdowns.totalActiveListeningHours),
       returningListenerCount: stats24h.returningListenerCount,
+      returningMinAvgSec: config.returningMinAvgSec ?? 60,
+      returningExcludeBots: config.returningExcludeBots !== false,
       maxCapacity: latestState.sourceMeta.maxListeners || config.maxListenersCapacity || 500,
     },
     listeners: listenersWithAliases,
@@ -548,6 +592,15 @@ app.post('/api/config', async (req, res) => {
   if (body.maxListenersCapacity !== undefined) {
     allowed.maxListenersCapacity = Math.max(10, parseInt(body.maxListenersCapacity, 10) || 500);
   }
+  if (body.returningMinAvgSec !== undefined) {
+    allowed.returningMinAvgSec = Math.max(0, parseInt(body.returningMinAvgSec, 10) || 0);
+  }
+  if (typeof body.returningExcludeBots === 'boolean') {
+    allowed.returningExcludeBots = body.returningExcludeBots;
+  }
+  if (typeof body.requireDashboardAuth === 'boolean') {
+    allowed.requireDashboardAuth = body.requireDashboardAuth;
+  }
 
   const updated = updateConfig(allowed);
   schedulePoller();
@@ -589,12 +642,63 @@ app.post('/api/test-connection', async (req, res) => {
   }
 });
 
-// Start initial poll & server
+// Ensure TLS Certificate exists in data/ for native HTTPS server on port 3443
+function ensureTlsCertificates() {
+  const dataDir = path.join(__dirname, 'data');
+  const certPath = process.env.TLS_CERT_PATH || path.join(dataDir, 'tls-cert.pem');
+  const keyPath = process.env.TLS_KEY_PATH || path.join(dataDir, 'tls-key.pem');
+
+  if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+    try {
+      execFileSync(
+        'openssl',
+        [
+          'req',
+          '-x509',
+          '-newkey',
+          'rsa:2048',
+          '-nodes',
+          '-sha256',
+          '-days',
+          '3650',
+          '-subj',
+          '/C=RO/ST=Prahova/L=Ploiesti/O=OZONE.FM/CN=ozonecast.local',
+          '-keyout',
+          keyPath,
+          '-out',
+          certPath,
+        ],
+        { stdio: 'ignore' }
+      );
+    } catch (err) {
+      console.warn('Could not auto-generate self-signed TLS cert:', err.message);
+      return null;
+    }
+  }
+
+  try {
+    return {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+// Start initial poll & HTTP + HTTPS servers
 executePollCycle()
   .catch(err => console.error('Initial poll failed:', err.message))
   .finally(() => {
     schedulePoller();
     app.listen(PORT, () => {
-      console.log(`OzoneCast Telemetry Server running on http://localhost:${PORT}`);
+      console.log(`OzoneCast Telemetry Server (HTTP)  running on http://0.0.0.0:${PORT}`);
     });
+
+    const tlsCreds = ensureTlsCertificates();
+    if (tlsCreds) {
+      https.createServer(tlsCreds, app).listen(HTTPS_PORT, () => {
+        console.log(`OzoneCast Telemetry Server (HTTPS) running on https://0.0.0.0:${HTTPS_PORT}`);
+      });
+    }
   });

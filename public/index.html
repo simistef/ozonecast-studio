@@ -294,9 +294,20 @@
         <div class="panel-header">
           <div class="panel-title-group">
             <h2>Top 5 Returning Listeners</h2>
-            <div class="panel-subtitle">Most loyal repeat listeners ranked by return sessions &amp; cumulative connected time</div>
+            <div class="panel-subtitle">Most loyal repeat listeners (bots excluded • filtered by min. avg connected time)</div>
           </div>
-          <span id="returningTotalTag" class="mount-tag">SQLite Tracked</span>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="returningMinAvgQuickSelect" class="select-control" title="Minimum average session duration to qualify for Top 5 Returning Listeners" aria-label="Minimum average session duration">
+              <option value="0">Min Avg: Any (0s)</option>
+              <option value="30">Min Avg: 30 sec</option>
+              <option value="60" selected>Min Avg: 1 min (60s)</option>
+              <option value="120">Min Avg: 2 min</option>
+              <option value="300">Min Avg: 5 min</option>
+              <option value="600">Min Avg: 10 min</option>
+              <option value="900">Min Avg: 15 min</option>
+            </select>
+            <span id="returningTotalTag" class="mount-tag">SQLite Tracked</span>
+          </div>
         </div>
         <div class="panel-body">
           <div id="topReturningList" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -452,12 +463,32 @@
               <label for="cfgMaxCapacity">Max Listener Capacity</label>
               <input type="number" id="cfgMaxCapacity" class="form-input mono" min="10" max="100000" value="500" />
             </div>
-            <div class="form-row" style="justify-content:flex-end">
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding-bottom:8px">
+            <div class="form-row">
+              <label for="cfgReturningMinAvgSec">Returning Listeners Min. Avg Time (seconds)</label>
+              <input type="number" id="cfgReturningMinAvgSec" class="form-input mono" min="0" max="86400" value="60" title="Exclude listeners from Top 5 Returning Listeners whose average connection time is below this threshold (60s = 1 minute)" />
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-row">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="checkbox" id="cfgReturningExcludeBots" checked />
+                <span>Exclude bots &amp; crawlers from Top 5 Returning Listeners</span>
+              </label>
+            </div>
+            <div class="form-row">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
                 <input type="checkbox" id="cfgIgnoreTls" checked />
                 <span>Allow self-signed SSL certificates on port 8443</span>
               </label>
             </div>
+          </div>
+
+          <div class="form-row">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="cfgRequireDashboardAuth" checked />
+              <span>Protect this Dashboard with Icecast Admin username &amp; password</span>
+            </label>
           </div>
 
           <div id="testConnectionResultBox" style="display:none;padding:10px 12px;border-radius:6px;font-size:12px" class="mono"></div>

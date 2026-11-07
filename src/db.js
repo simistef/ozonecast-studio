@@ -88,6 +88,11 @@ const DEFAULT_CONFIG = {
   sourceMode: process.env.SOURCE_MODE || 'auto', // 'auto' | 'live' | 'simulation'
   stationName: process.env.STATION_NAME || 'OZONE.FM',
   maxListenersCapacity: parseInt(process.env.MAX_LISTENERS || '500', 10) || 500,
+  returningMinAvgSec: parseInt(process.env.RETURNING_MIN_AVG_SEC || '60', 10) >= 0
+    ? parseInt(process.env.RETURNING_MIN_AVG_SEC || '60', 10)
+    : 60,
+  returningExcludeBots: process.env.RETURNING_EXCLUDE_BOTS !== 'false',
+  requireDashboardAuth: process.env.REQUIRE_DASHBOARD_AUTH !== 'false',
 };
 
 function getConfig() {
@@ -128,10 +133,20 @@ const insertEventStmt = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
-// Clean up any stale rows where Role ('anonymous') was previously stored as user_agent
+// Clean up any stale rows where Role ('anonymous') was previously stored as user_agent,
+// and ensure any historical bot/crawler sessions are tagged as 'Bot / Ripper'.
 try {
   db.exec(`DELETE FROM listener_sessions WHERE LOWER(user_agent) = 'anonymous' OR LOWER(player) = 'anonymous';`);
   db.exec(`DELETE FROM events_log WHERE LOWER(player) = 'anonymous';`);
+  db.exec(`
+    UPDATE listener_sessions
+    SET category = 'Bot / Ripper'
+    WHERE LOWER(user_agent) LIKE '%bot%'
+       OR LOWER(user_agent) LIKE '%onlineradiobox%'
+       OR LOWER(user_agent) LIKE '%crawler%'
+       OR LOWER(user_agent) LIKE '%spider%'
+       OR LOWER(user_agent) LIKE '%streamripper%';
+  `);
 } catch (_) {}
 
 const upsertSessionStmt = db.prepare(`
@@ -442,9 +457,15 @@ function setIpAlias(ip, friendlyName, notes = '') {
 
 /**
  * Returns the Top N Returning Listeners ranked by distinct session visits & cumulative connected time.
+ * Excludes bots/crawlers (when returningExcludeBots is true) and listeners with average connection
+ * time below returningMinAvgSec (default 60s = 1 minute).
  */
 function getTopReturningListeners(limit = 5, sourceMode = 'live') {
+  const cfg = getConfig();
+  const minAvgSec = Math.max(0, Number(cfg.returningMinAvgSec ?? 60));
+  const excludeBots = cfg.returningExcludeBots !== false ? 1 : 0;
   const aliases = getIpAliasesMap();
+
   const rows = db
     .prepare(`
       SELECT
@@ -464,11 +485,20 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live') {
         MAX(country_name) as country_name
       FROM listener_sessions
       WHERE source_mode = ?
+        AND (? = 0 OR (
+          category != 'Bot / Ripper'
+          AND LOWER(user_agent) NOT LIKE '%bot%'
+          AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+          AND LOWER(user_agent) NOT LIKE '%crawler%'
+          AND LOWER(user_agent) NOT LIKE '%spider%'
+          AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        ))
       GROUP BY ip
+      HAVING AVG(duration_seconds) >= ?
       ORDER BY session_count DESC, total_duration_seconds DESC
       LIMIT ?
     `)
-    .all(sourceMode, limit);
+    .all(sourceMode, excludeBots, minAvgSec, limit);
 
   return rows.map((r, idx) => ({
     rank: idx + 1,
@@ -494,6 +524,9 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live') {
 function getAggregatedStats(sourceMode = 'live') {
   const now = Date.now();
   const dayAgo = now - 24 * 3600 * 1000;
+  const cfg = getConfig();
+  const minAvgSec = Math.max(0, Number(cfg.returningMinAvgSec ?? 60));
+  const excludeBots = cfg.returningExcludeBots !== false ? 1 : 0;
 
   const peak24hRow = db
     .prepare('SELECT listener_count, ts, peak_reported FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY listener_count DESC LIMIT 1')
@@ -520,10 +553,20 @@ function getAggregatedStats(sourceMode = 'live') {
     .prepare(`
       SELECT COUNT(*) as returning_ips
       FROM (
-        SELECT ip FROM listener_sessions WHERE source_mode = ? GROUP BY ip HAVING COUNT(*) > 1
+        SELECT ip
+        FROM listener_sessions
+        WHERE source_mode = ?
+          AND (? = 0 OR (
+            category != 'Bot / Ripper'
+            AND LOWER(user_agent) NOT LIKE '%bot%'
+            AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+            AND LOWER(user_agent) NOT LIKE '%crawler%'
+          ))
+        GROUP BY ip
+        HAVING COUNT(*) > 1 AND AVG(duration_seconds) >= ?
       )
     `)
-    .get(sourceMode);
+    .get(sourceMode, excludeBots, minAvgSec);
 
   const recentEvents = db
     .prepare('SELECT * FROM events_log ORDER BY ts DESC LIMIT 60')
@@ -539,6 +582,8 @@ function getAggregatedStats(sourceMode = 'live') {
     avgDuration24hSec: Math.round(sessionStats24h?.avg_duration_sec || 0),
     totalListeningHours24h: Number(((sessionStats24h?.total_listening_sec || 0) / 3600).toFixed(2)),
     returningListenerCount: returningCountRow?.returning_ips || 0,
+    returningMinAvgSec: minAvgSec,
+    returningExcludeBots: Boolean(excludeBots),
     recentEvents,
   };
 }
