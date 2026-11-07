@@ -76,7 +76,8 @@ function lookupIp(rawIp) {
       countryCode: 'XX',
       countryName: 'Unknown',
       region: '',
-      city: 'Unknown',
+      city: '',
+      hasCity: false,
       lat: 0,
       lon: 0,
       timezone: 'UTC',
@@ -95,6 +96,7 @@ function lookupIp(rawIp) {
       countryName: 'Local Network (LAN)',
       region: 'Internal',
       city: 'Studio / Local',
+      hasCity: true,
       lat: 44.4268,
       lon: 26.1025,
       timezone: 'Europe/Bucharest',
@@ -111,7 +113,8 @@ function lookupIp(rawIp) {
       countryCode: 'UN',
       countryName: 'Unresolved Region',
       region: '',
-      city: 'Unknown City',
+      city: '',
+      hasCity: false,
       lat: 46.2,
       lon: 15.0,
       timezone: 'UTC',
@@ -131,13 +134,16 @@ function lookupIp(rawIp) {
   } catch (_) {}
 
   const ll = Array.isArray(record.ll) && record.ll.length === 2 ? record.ll : [0, 0];
+  const rawCity = (record.city || '').trim();
+  const hasCity = Boolean(rawCity);
 
   const result = {
     ip,
     countryCode,
     countryName,
     region: record.region || '',
-    city: record.city || countryName,
+    city: hasCity ? rawCity : '',
+    hasCity,
     lat: Number(ll[0]) || 0,
     lon: Number(ll[1]) || 0,
     timezone: record.timezone || 'UTC',

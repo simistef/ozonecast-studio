@@ -409,9 +409,9 @@
           ? `<span class="event-badge join">LIVE NOW</span>`
           : `<span class="event-badge leave">RECENT</span>`;
         const locLabel =
-          item.city && item.city !== item.countryName && item.city !== 'Unknown City'
+          item.city && item.city !== item.countryName && !item.city.startsWith('Unresolved') && item.city !== 'Unknown City' && item.city !== 'Unknown'
             ? `${escapeHtml(item.city)}, <span style="color:var(--text-secondary)">${escapeHtml(item.countryName || item.countryCode)}</span>`
-            : escapeHtml(item.countryName || item.city || item.countryCode);
+            : escapeHtml(item.countryName || item.countryCode || 'Unknown');
         const nameBadge = item.friendlyName
           ? `<span style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.38);border-radius:4px;padding:1px 6px;font-size:11.5px;font-weight:600">${escapeHtml(item.friendlyName)}</span>`
           : '';
@@ -460,10 +460,16 @@
 
     container.innerHTML = items
       .map(item => {
-        const label =
-          geoTabMode === 'countries'
-            ? `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span>${escapeHtml(item.countryName)}</span>`
-            : `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span>${escapeHtml(item.city)}</span>`;
+        let label = '';
+        if (geoTabMode === 'countries') {
+          label = `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span>${escapeHtml(item.countryName)}</span>`;
+        } else {
+          if (item.hasCity) {
+            label = `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span>${escapeHtml(item.city)}</span>`;
+          } else {
+            label = `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span style="color:var(--text-secondary);font-style:italic" title="Specific city not resolved by GeoIP">${escapeHtml(item.city)}</span>`;
+          }
+        }
         return `
           <div class="dist-item">
             <div class="dist-item-header">
@@ -796,9 +802,9 @@
               <div style="display:flex;align-items:center;gap:8px">
                 ${renderCountryFlag(r.geo?.countryCode, r.geo?.countryName, 18)}
                 <span>${
-                  r.geo?.city && r.geo.city !== r.geo.countryName && r.geo.city !== 'Unknown City'
+                  r.geo?.city && r.geo.city !== r.geo.countryName && !r.geo.city.startsWith('Unresolved') && r.geo.city !== 'Unknown City' && r.geo.city !== 'Unknown'
                     ? `${escapeHtml(r.geo.city)}, <span style="color:var(--text-secondary)">${escapeHtml(r.geo?.countryName || '')}</span>`
-                    : `${escapeHtml(r.geo?.countryName || r.geo?.city || 'Unknown')}`
+                    : `${escapeHtml(r.geo?.countryName || 'Unknown')}`
                 }</span>
               </div>
             </td>
@@ -906,7 +912,7 @@
         <div class="form-grid-2" style="background:var(--bg-canvas);padding:12px 14px;border-radius:8px;border:1px solid var(--border-subtle)">
           <div>
             <div style="font-size:11px;color:var(--text-muted)">LOCATION</div>
-            <div style="font-weight:600;margin-top:2px;display:flex;align-items:center;gap:6px">${renderCountryFlag(geo.countryCode, geo.countryName, 18)} <span>${escapeHtml(geo.city && geo.city !== geo.countryName ? `${geo.city}, ${geo.countryName}` : geo.countryName)}</span></div>
+            <div style="font-weight:600;margin-top:2px;display:flex;align-items:center;gap:6px">${renderCountryFlag(geo.countryCode, geo.countryName, 18)} <span>${escapeHtml(geo.hasCity && geo.city && geo.city !== geo.countryName && !geo.city.startsWith('Unresolved') ? `${geo.city}, ${geo.countryName}` : `${geo.countryName || 'Unknown'}`)}</span></div>
             <div class="mono" style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">Coords: ${geo.lat}, ${geo.lon} • TZ: ${escapeHtml(geo.timezone)}</div>
           </div>
           <div>

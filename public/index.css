@@ -582,22 +582,52 @@ button, input, select, textarea {
 }
 
 .map-pin-pulse {
-  fill: hsla(28, 95%, 56%, 0.28);
   animation: pulseRing 2.4s infinite ease-out;
   transform-box: fill-box;
   transform-origin: center;
 }
 
+.map-pin-pulse-human {
+  fill: hsla(28, 95%, 56%, 0.32);
+}
+
+.map-pin-pulse-bot {
+  fill: hsla(348, 90%, 60%, 0.38);
+}
+
+.map-pin-pulse-mixed {
+  fill: hsla(285, 80%, 65%, 0.35);
+}
+
 .map-pin-core {
-  fill: var(--accent-amber);
   stroke: hsl(214, 28%, 7%);
-  stroke-width: 1.2;
+  stroke-width: 1.3;
   cursor: pointer;
   transition: r 0.15s ease, fill 0.15s ease;
 }
 
-.map-pin-core:hover {
+.map-pin-core-human {
+  fill: var(--accent-amber);
+}
+
+.map-pin-core-human:hover {
   fill: var(--accent-emerald);
+}
+
+.map-pin-core-bot {
+  fill: #ff4d6d;
+}
+
+.map-pin-core-bot:hover {
+  fill: #ff758f;
+}
+
+.map-pin-core-mixed {
+  fill: #d946ef;
+}
+
+.map-pin-core-mixed:hover {
+  fill: #e879f9;
 }
 
 @keyframes pulseRing {

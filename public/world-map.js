@@ -233,7 +233,8 @@
         clusters.set(key, {
           lat,
           lon,
-          city: l.geo?.city || 'Unknown',
+          city: l.geo?.city || '',
+          hasCity: Boolean(l.geo?.hasCity),
           countryCode: cc,
           countryName: l.geo?.countryName || '',
           clients: [],
@@ -315,36 +316,103 @@
     clusterList.forEach((cluster, idx) => {
       const { x, y } = latLonToXY(cluster.lat, cluster.lon, viewMode);
       const count = cluster.clients.length;
-      const baseRadius = Math.min(9.5, 4.2 + Math.sqrt(count) * 1.5) * pinScale;
-      const pulseRadius = baseRadius * 2.2;
+
+      // Classify bots vs humans
+      const botClients = cluster.clients.filter(c => Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+      const humanClients = cluster.clients.filter(c => !Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+      const botCount = botClients.length;
+      const humanCount = humanClients.length;
+      const isBotOnly = botCount > 0 && humanCount === 0;
+      const isHumanOnly = humanCount > 0 && botCount === 0;
+      const isMixed = botCount > 0 && humanCount > 0;
+
+      const baseRadius = Math.min(10.5, 6.2 + Math.sqrt(count) * 1.5) * pinScale;
+      const pulseRadius = baseRadius * 2.3;
+
+      // Pulse and core styling classes
+      const pulseClass = isBotOnly
+        ? 'map-pin-pulse map-pin-pulse-bot'
+        : isMixed
+        ? 'map-pin-pulse map-pin-pulse-mixed'
+        : 'map-pin-pulse map-pin-pulse-human';
+
+      const coreClass = isBotOnly
+        ? 'map-pin-core map-pin-core-bot'
+        : isMixed
+        ? 'map-pin-core map-pin-core-mixed'
+        : 'map-pin-core map-pin-core-human';
+
+      // Vector Icon scaled to pin core
+      const iconScale = (baseRadius / 9.0).toFixed(2);
+      let iconSvg = '';
+      if (isBotOnly) {
+        iconSvg =
+          '<g class="pin-glyph-bot" transform="scale(' + iconScale + ')" style="pointer-events:none">' +
+          '<line x1="0" y1="-5.2" x2="0" y2="-3.8" stroke="#0b0f17" stroke-width="1.2" stroke-linecap="round" />' +
+          '<circle cx="0" cy="-5.5" r="0.8" fill="#0b0f17" />' +
+          '<rect x="-3.8" y="-3.6" width="7.6" height="6.6" rx="1.5" fill="#0b0f17" />' +
+          '<circle cx="-1.8" cy="-0.6" r="0.8" fill="#ff4d6d" />' +
+          '<circle cx="1.8" cy="-0.6" r="0.8" fill="#ff4d6d" />' +
+          '<line x1="-1.8" y1="1.6" x2="1.8" y2="1.6" stroke="#ffffff" stroke-width="0.7" stroke-linecap="round" />' +
+          '</g>';
+      } else if (isHumanOnly) {
+        iconSvg =
+          '<g class="pin-glyph-human" transform="scale(' + iconScale + ')" style="pointer-events:none">' +
+          '<circle cx="0" cy="-1.4" r="2.2" fill="#0b0f17" />' +
+          '<path d="M-3.8,4.5 C-3.8,2.2 -1.9,1.1 0,1.1 C1.9,1.1 3.8,2.2 3.8,4.5 Z" fill="#0b0f17" />' +
+          '<path d="M-3.2,-1.2 A3.2,3.2 0 0,1 3.2,-1.2" fill="none" stroke="#0b0f17" stroke-width="1.1" stroke-linecap="round" />' +
+          '<rect x="-4.2" y="-1.8" width="1.2" height="2.2" rx="0.5" fill="#0b0f17" />' +
+          '<rect x="3.0" y="-1.8" width="1.2" height="2.2" rx="0.5" fill="#0b0f17" />' +
+          '</g>';
+      } else {
+        // Mixed: human + bot in same cluster
+        iconSvg =
+          '<g class="pin-glyph-mixed" transform="scale(' + iconScale + ')" style="pointer-events:none">' +
+          '<circle cx="-2.6" cy="-0.8" r="1.6" fill="#0b0f17" />' +
+          '<path d="M-4.6,3.6 C-4.6,2.0 -3.6,1.2 -2.6,1.2 C-1.6,1.2 -0.6,2.0 -0.6,3.6 Z" fill="#0b0f17" />' +
+          '<rect x="0.6" y="-2.8" width="4.2" height="4.2" rx="1.0" fill="#0b0f17" />' +
+          '<circle cx="2.0" cy="-0.8" r="0.6" fill="#ff4d6d" />' +
+          '<circle cx="3.4" cy="-0.8" r="0.6" fill="#ff4d6d" />' +
+          '</g>';
+      }
 
       // Determine label text (City or Country)
-      const labelTitle =
-        cluster.city && cluster.city !== cluster.countryName && cluster.city !== 'Unknown City'
-          ? cluster.city
-          : cluster.countryName || cluster.countryCode;
+      const hasRealCity =
+        cluster.city &&
+        cluster.city !== cluster.countryName &&
+        !cluster.city.startsWith('Unresolved') &&
+        cluster.city !== 'Unknown City' &&
+        cluster.city !== 'Unknown';
+
+      const labelTitle = hasRealCity ? cluster.city : cluster.countryName || cluster.countryCode;
       const flagEmoji = isoToFlagEmoji(cluster.countryCode);
-      const fullLabel = flagEmoji + ' ' + labelTitle + (count > 1 ? ' (' + count + ')' : '');
+
+      let iconBadge = '';
+      if (isBotOnly) iconBadge = ' 🤖';
+      else if (isHumanOnly) iconBadge = ' 👤';
+      else if (isMixed) iconBadge = ' 👤' + humanCount + ' 🤖' + botCount;
+
+      const fullLabel = flagEmoji + ' ' + labelTitle + iconBadge + (count > 1 && !isMixed ? ' (' + count + ')' : '');
 
       // Smart offset so nearby cities (e.g. Ploiești and Mrenești in Romania) do not overlap
-      let offsetY = -9 * pinScale;
+      let offsetY = -10 * pinScale;
       let anchor = 'middle';
       let offsetX = 0;
       for (const prev of placedLabels) {
         if (Math.abs(x - prev.x) < 55 * pinScale && Math.abs(y + offsetY - (prev.y + prev.offsetY)) < 14 * pinScale) {
-          offsetY = prev.offsetY < 0 ? 13 * pinScale : -11 * pinScale;
+          offsetY = prev.offsetY < 0 ? 14 * pinScale : -12 * pinScale;
           if (x < prev.x) {
             anchor = 'end';
-            offsetX = -5 * pinScale;
+            offsetX = -6 * pinScale;
           } else {
             anchor = 'start';
-            offsetX = 5 * pinScale;
+            offsetX = 6 * pinScale;
           }
         }
       }
       placedLabels.push({ x, y, offsetY });
 
-      const showCallout = isEuroProj || clusterList.length <= 12;
+      const showCallout = isEuroProj || clusterList.length <= 14;
       const calloutFontSize = (9.5 * pinScale).toFixed(1);
       const calloutStroke = (3.0 * pinScale).toFixed(1);
       const calloutHtml = showCallout
@@ -371,14 +439,19 @@
         ', ' +
         y.toFixed(1) +
         ')">' +
-        '<circle class="map-pin-pulse" r="' +
+        '<circle class="' +
+        pulseClass +
+        '" r="' +
         pulseRadius.toFixed(1) +
         '" cx="0" cy="0" />' +
-        '<circle class="map-pin-core" r="' +
+        '<circle class="' +
+        coreClass +
+        '" r="' +
         baseRadius.toFixed(1) +
         '" cx="0" cy="0" style="stroke-width:' +
-        (1.2 * pinScale).toFixed(1) +
+        (1.3 * pinScale).toFixed(1) +
         'px" />' +
+        iconSvg +
         calloutHtml +
         '</g>';
     });
@@ -406,48 +479,84 @@
 
       group.addEventListener('mouseenter', () => {
         if (!tooltipEl) return;
-        const topClients = cluster.clients.slice(0, 4);
+
+        const botClients = cluster.clients.filter(c => Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+        const humanClients = cluster.clients.filter(c => !Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper'));
+        const botCount = botClients.length;
+        const humanCount = humanClients.length;
+
+        const topClients = cluster.clients.slice(0, 5);
         const clientLines = topClients
-          .map(
-            c =>
-              '<div class="mono" style="font-size:11px;color:var(--text-secondary)">' +
-              (c.friendlyName
-                ? '<strong style="color:var(--accent-amber)">' +
-                  c.friendlyName.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
-                  '</strong> (' +
-                  c.ip +
-                  ')'
-                : c.ip) +
+          .map(c => {
+            const isCategorizedBot = Boolean(c.isBot || c.ua?.isRipper || c.ua?.category === 'Bot / Ripper');
+            const botTag = isCategorizedBot
+              ? '<span style="background:rgba(255,77,109,0.22);color:#ff4d6d;border:1px solid rgba(255,77,109,0.45);border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:6px">🤖 BOT</span>'
+              : '<span style="background:rgba(46,196,182,0.18);color:#2ec4b6;border:1px solid rgba(46,196,182,0.4);border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:6px">👤 LISTENER</span>';
+            const nameHtml = c.friendlyName
+              ? '<strong style="color:var(--accent-amber)">' +
+                c.friendlyName.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
+                '</strong> (' +
+                c.ip +
+                ')'
+              : c.ip;
+            return (
+              '<div class="mono" style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:3px">' +
+              '<span>' +
+              nameHtml +
               ' • ' +
-              c.ua.player +
+              (c.ua?.player || 'Audio Player') +
+              '</span>' +
+              botTag +
               '</div>'
-          )
+            );
+          })
           .join('');
+
         const extra =
-          cluster.clients.length > 4
-            ? '<div style="font-size:11px;color:var(--text-muted)">+' +
-              (cluster.clients.length - 4) +
+          cluster.clients.length > 5
+            ? '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+' +
+              (cluster.clients.length - 5) +
               ' more in ' +
-              cluster.city +
+              (cluster.city || cluster.countryName) +
               '</div>'
             : '';
 
-        const locName =
-          cluster.city && cluster.city !== cluster.countryName
-            ? cluster.city + ', ' + cluster.countryName
-            : cluster.countryName || cluster.city;
+        const hasRealCity =
+          cluster.city &&
+          cluster.city !== cluster.countryName &&
+          !cluster.city.startsWith('Unresolved') &&
+          cluster.city !== 'Unknown City' &&
+          cluster.city !== 'Unknown';
+
+        const locName = hasRealCity
+          ? cluster.city + ', ' + (cluster.countryName || cluster.countryCode)
+          : cluster.countryName || cluster.city;
+
+        let badgeHeader = '';
+        if (humanCount > 0) {
+          badgeHeader +=
+            '<span style="background:rgba(255,159,28,0.18);color:var(--accent-amber);border:1px solid rgba(255,159,28,0.4);padding:1px 6px;border-radius:999px;font-size:10.5px;font-weight:700">👤 ' +
+            humanCount +
+            '</span> ';
+        }
+        if (botCount > 0) {
+          badgeHeader +=
+            '<span style="background:rgba(255,77,109,0.2);color:#ff4d6d;border:1px solid rgba(255,77,109,0.45);padding:1px 6px;border-radius:999px;font-size:10.5px;font-weight:700">🤖 ' +
+            botCount +
+            '</span>';
+        }
 
         tooltipEl.innerHTML =
-          '<div style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--text-primary);margin-bottom:4px">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;border-bottom:1px solid var(--border-subtle);padding-bottom:4px">' +
+          '<div style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--text-primary)">' +
           flagImgHtml(cluster.countryCode, 16) +
           '<span>' +
           locName +
           '</span>' +
-          '<span style="color:var(--accent-amber);margin-left:4px" class="mono">' +
-          cluster.clients.length +
-          ' listener' +
-          (cluster.clients.length > 1 ? 's' : '') +
-          '</span>' +
+          '</div>' +
+          '<div>' +
+          badgeHeader +
+          '</div>' +
           '</div>' +
           clientLines +
           extra;

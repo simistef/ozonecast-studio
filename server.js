@@ -197,12 +197,17 @@ function computeBreakdowns(listeners) {
     cEntry.totalDurationSec += sec;
 
     // City aggregation
-    const cityKey = `${l.geo.city}, ${cc}`;
+    const cName = l.geo.countryName || cc;
+    const rawCity = (l.geo.city || '').trim();
+    const hasCity = Boolean(l.geo.hasCity && rawCity && rawCity !== cName);
+    const displayCity = hasCity ? rawCity : `Unresolved City (${cName})`;
+    const cityKey = hasCity ? `${rawCity}::${cc}` : `unresolved::${cc}`;
     if (!cityMap.has(cityKey)) {
       cityMap.set(cityKey, {
-        city: l.geo.city,
+        city: displayCity,
+        hasCity,
         countryCode: cc,
-        countryName: l.geo.countryName,
+        countryName: cName,
         lat: l.geo.lat,
         lon: l.geo.lon,
         count: 0,
@@ -240,7 +245,11 @@ function computeBreakdowns(listeners) {
       sharePct: Number(((c.count / total) * 100).toFixed(1)),
       avgDurationSec: Math.round(c.totalDurationSec / c.count),
     }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      if (a.hasCity !== b.hasCity) return a.hasCity ? -1 : 1;
+      return a.city.localeCompare(b.city);
+    });
 
   const toSortedDist = mapObj =>
     Array.from(mapObj.entries())
