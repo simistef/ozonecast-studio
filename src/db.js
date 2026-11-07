@@ -162,6 +162,9 @@ try {
 try {
   db.exec("ALTER TABLE listener_sessions ADD COLUMN last_track TEXT DEFAULT '';");
 } catch (_) {}
+try {
+  db.exec("ALTER TABLE listener_sessions ADD COLUMN last_track_progress_sec INTEGER DEFAULT 0;");
+} catch (_) {}
 
 const insertSnapshotStmt = db.prepare(`
   INSERT INTO snapshots (ts, mount, listener_count, unique_ips, peak_reported, current_track, bitrate, source_mode, human_count, human_unique_ips)
@@ -193,8 +196,8 @@ const upsertSessionStmt = db.prepare(`
   INSERT INTO listener_sessions (
     session_key, client_id, ip, mount, user_agent, player, category, os,
     country_code, country_name, city, lat, lon,
-    first_seen, last_seen, duration_seconds, is_active, source_mode, last_track
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    first_seen, last_seen, duration_seconds, is_active, source_mode, last_track, last_track_progress_sec
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
   ON CONFLICT(session_key) DO UPDATE SET
     client_id = excluded.client_id,
     user_agent = excluded.user_agent,
@@ -205,7 +208,8 @@ const upsertSessionStmt = db.prepare(`
     last_seen = excluded.last_seen,
     duration_seconds = MAX(listener_sessions.duration_seconds, excluded.duration_seconds),
     is_active = 1,
-    last_track = CASE WHEN excluded.last_track != '' THEN excluded.last_track ELSE listener_sessions.last_track END
+    last_track = CASE WHEN excluded.last_track != '' THEN excluded.last_track ELSE listener_sessions.last_track END,
+    last_track_progress_sec = excluded.last_track_progress_sec
 `);
 
 function recordPollResult({
@@ -213,6 +217,7 @@ function recordPollResult({
   enrichedListeners,
   reportedPeak,
   currentTrack,
+  trackProgressSec = 0,
   bitrate,
   sourceMode,
   lastTrack,
@@ -280,7 +285,8 @@ function recordPollResult({
       now,
       client.connectedSeconds,
       sourceMode,
-      currentTrack || ''
+      currentTrack || '',
+      trackProgressSec || 0
     );
 
     if (!prevMap.has(sessionKey) && prevActiveRows.length > 0) {
@@ -302,13 +308,15 @@ function recordPollResult({
     UPDATE listener_sessions
     SET is_active = 0,
         last_seen = ?,
-        last_track = CASE WHEN ? != '' THEN ? ELSE last_track END
+        last_track = CASE WHEN ? != '' THEN ? ELSE last_track END,
+        last_track_progress_sec = ?
     WHERE session_key = ?
   `);
   for (const [key, prev] of prevMap.entries()) {
     if (!currentKeys.has(key)) {
       const exitTrack = currentTrack || lastTrack || '';
-      markInactiveStmt.run(now, exitTrack, exitTrack, key);
+      markInactiveStmt.run(now, exitTrack, exitTrack, trackProgressSec || 0, key);
+      const progressLabel = trackProgressSec > 0 ? ` at ${formatDurationClock(trackProgressSec)}` : '';
       insertEventStmt.run(
         now,
         'leave',
@@ -317,7 +325,7 @@ function recordPollResult({
         prev.city,
         prev.player,
         prev.duration_seconds,
-        `Disconnected after ${formatDurationShort(prev.duration_seconds)}${exitTrack ? ` (Track: ${exitTrack})` : ''}`,
+        `Disconnected after ${formatDurationShort(prev.duration_seconds)}${exitTrack ? ` (Track: ${exitTrack}${progressLabel})` : ''}`,
         mount
       );
     }
@@ -328,6 +336,13 @@ function recordPollResult({
     db.prepare('DELETE FROM snapshots WHERE ts < ?').run(fourteenDaysAgo);
     db.prepare('DELETE FROM events_log WHERE id NOT IN (SELECT id FROM events_log ORDER BY ts DESC LIMIT 500)').run();
   }
+}
+
+function formatDurationClock(sec) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
 }
 
 function formatDurationShort(sec) {
@@ -707,6 +722,39 @@ function setBotIp(ip, isBot, reason = '') {
   }
 }
 
+function findTrackStartTs(trackName, exitTs) {
+  if (!trackName || !exitTs) return null;
+  const event = db.prepare(`
+    SELECT ts FROM events_log
+    WHERE event_type = 'track'
+      AND details = ?
+      AND ts <= ?
+      AND ts >= ? - (30 * 60 * 1000)
+    ORDER BY ts DESC
+    LIMIT 1
+  `).get(`Now Playing: ${trackName}`, exitTs, exitTs);
+
+  if (event && event.ts) return event.ts;
+
+  const snaps = db.prepare(`
+    SELECT ts, current_track
+    FROM snapshots
+    WHERE ts <= ? AND ts >= ? - (30 * 60 * 1000)
+    ORDER BY ts DESC
+    LIMIT 60
+  `).all(exitTs, exitTs);
+
+  let earliest = null;
+  for (const snap of snaps) {
+    if (snap.current_track === trackName) {
+      earliest = snap.ts;
+    } else {
+      break;
+    }
+  }
+  return earliest;
+}
+
 function getIpHistory(ip) {
   const sessions = db
     .prepare('SELECT * FROM listener_sessions WHERE ip = ? ORDER BY last_seen DESC LIMIT 50')
@@ -727,6 +775,12 @@ function getIpHistory(ip) {
         s.last_track = snap.current_track;
       }
     }
+    if ((!s.last_track_progress_sec || s.last_track_progress_sec === 0) && s.last_track) {
+      const startTs = findTrackStartTs(s.last_track, s.last_seen);
+      if (startTs) {
+        s.last_track_progress_sec = Math.max(0, Math.floor((s.last_seen - startTs) / 1000));
+      }
+    }
   }
 
   const summary = db
@@ -743,7 +797,9 @@ function getIpHistory(ip) {
     .get(ip);
   const alias = getIpAlias(ip);
   const isBot = isBotIp(ip);
-  const lastExitTrack = sessions[0]?.last_track || '';
+  const mostRecent = sessions[0];
+  const lastExitTrack = mostRecent?.last_track || '';
+  const lastExitTrackProgressSec = mostRecent?.last_track_progress_sec || 0;
 
   return {
     ip,
@@ -752,6 +808,7 @@ function getIpHistory(ip) {
     isBot,
     summary,
     lastExitTrack,
+    lastExitTrackProgressSec,
     sessions,
   };
 }

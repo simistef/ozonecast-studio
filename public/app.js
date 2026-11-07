@@ -1037,17 +1037,25 @@
         return;
       }
 
-      const { geo, activeConnections, history, friendlyName } = data;
+      const { geo, activeConnections, history, friendlyName, currentTrack: liveTrack, currentTrackProgressSec: liveTrackProgressSec } = data;
       const sum = history?.summary || {};
       const sessions = history?.sessions || [];
       const currentName = friendlyName || history?.friendlyName || '';
       const isBot = Boolean(history?.isBot);
       const isCurrentlyConnected = activeConnections.length > 0;
-      const currentStreamTrack = dashboardState?.stream?.title || '';
+      const currentStreamTrack = liveTrack || dashboardState?.stream?.title || '';
       const exitTrack = history?.lastExitTrack || sessions[0]?.last_track || '';
+      const exitProgressSec = Number(history?.lastExitTrackProgressSec || sessions[0]?.last_track_progress_sec || 0);
+      const activeProgressSec = Number(liveTrackProgressSec || 0);
+
       const displayTrack = isCurrentlyConnected
         ? (currentStreamTrack || exitTrack || 'Live Stream')
         : (exitTrack || 'No track metadata recorded at disconnect');
+
+      const displayProgressSec = isCurrentlyConnected ? activeProgressSec : exitProgressSec;
+      const progressBadge = displayProgressSec > 0
+        ? `<span class="duration-pill" style="font-size:11px;padding:2px 8px;background:hsla(28,95%,54%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,54%,0.35);font-family:var(--font-mono);white-space:nowrap" title="Track progress when left">${formatDurationClock(displayProgressSec)} into song (${formatDurationHuman(displayProgressSec)})</span>`
+        : '';
 
       title.textContent = currentName ? `${currentName} (${ip})` : `Listener Dossier — ${ip}`;
 
@@ -1088,8 +1096,11 @@
             <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.04em">
               ${isCurrentlyConnected ? 'NOW PLAYING (LISTENER CURRENTLY CONNECTED)' : 'TRACK PLAYED WHEN LISTENER LEFT'}
             </div>
-            <div style="font-size:13.5px;font-weight:600;color:var(--text-primary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(displayTrack)}">
-              ${escapeHtml(displayTrack)}
+            <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap">
+              <span style="font-size:13.5px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px" title="${escapeHtml(displayTrack)}">
+                ${escapeHtml(displayTrack)}
+              </span>
+              ${progressBadge}
             </div>
           </div>
           ${
@@ -1124,6 +1135,10 @@
                     s => {
                       const trackText = s.last_track || 'No track metadata recorded';
                       const trackLabel = s.is_active ? 'Listening to:' : 'Left during:';
+                      const progSec = Number(s.last_track_progress_sec || 0);
+                      const progPill = progSec > 0
+                        ? `<span class="mono" style="font-size:11px;color:var(--accent-amber);background:hsla(28,95%,54%,0.14);padding:1px 6px;border-radius:3px;border:1px solid hsla(28,95%,54%,0.3);white-space:nowrap" title="Progress into song when session ended">at ${formatDurationClock(progSec)} (${formatDurationHuman(progSec)})</span>`
+                        : '';
                       return `
                   <div class="event-row" style="padding:9px 12px;border-radius:6px;background:var(--bg-canvas);border:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:12px">
                     <div style="flex:1;min-width:0">
@@ -1132,10 +1147,11 @@
                         <span style="font-size:11.5px;color:var(--text-muted)">(${escapeHtml(s.os)})</span>
                         ${s.is_active ? '<span class="status-badge live" style="padding:1px 6px;font-size:10px">Active</span>' : ''}
                       </div>
-                      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(trackText)}">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;flex-wrap:wrap" title="${escapeHtml(trackText)}">
                         <span style="color:var(--accent-amber);font-size:12px">🎵</span>
                         <span style="font-size:11px;font-weight:600;color:var(--accent-amber)">${trackLabel}</span>
-                        <span style="color:var(--text-primary);font-weight:500;overflow:hidden;text-overflow:ellipsis">${escapeHtml(trackText)}</span>
+                        <span style="color:var(--text-primary);font-weight:500">${escapeHtml(trackText)}</span>
+                        ${progPill}
                       </div>
                       <div class="mono" style="font-size:10.5px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(s.user_agent)}">${escapeHtml(s.user_agent)}</div>
                     </div>

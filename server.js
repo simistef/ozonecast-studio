@@ -108,6 +108,7 @@ let latestState = {
 };
 
 let lastTrackSeen = '';
+let trackStartTs = Date.now();
 let pollTimer = null;
 let isPolling = false;
 
@@ -359,11 +360,17 @@ async function executePollCycle(forceLiveAttempt = false) {
     const enriched = enrichListeners(rawResult.listeners || [], mount);
     const currentTrack = rawResult.sourceMeta?.title || '';
 
+    if (currentTrack && currentTrack !== lastTrackSeen) {
+      trackStartTs = Date.now();
+    }
+    const trackProgressSec = currentTrack ? Math.max(0, Math.floor((Date.now() - trackStartTs) / 1000)) : 0;
+
     recordPollResult({
       mount,
       enrichedListeners: enriched,
       reportedPeak: rawResult.sourceMeta?.listenerPeak || enriched.length,
       currentTrack,
+      trackProgressSec,
       bitrate: rawResult.sourceMeta?.bitrate || 320,
       sourceMode: activeMode,
       lastTrack: lastTrackSeen,
@@ -506,6 +513,10 @@ app.get('/api/ip/:ip', (req, res) => {
   const geo = lookupIp(ip);
   const history = getIpHistory(geo.ip);
   const activeMatches = latestState.listeners.filter(l => l.ip === geo.ip);
+  const currentTrackProgressSec = latestState.sourceMeta?.title
+    ? Math.max(0, Math.floor((Date.now() - trackStartTs) / 1000))
+    : 0;
+
   res.json({
     ok: true,
     ip: geo.ip,
@@ -513,6 +524,8 @@ app.get('/api/ip/:ip', (req, res) => {
     notes: history.notes || '',
     geo,
     activeConnections: activeMatches,
+    currentTrack: latestState.sourceMeta?.title || '',
+    currentTrackProgressSec,
     history,
   });
 });
