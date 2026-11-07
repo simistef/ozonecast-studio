@@ -121,6 +121,12 @@ const insertEventStmt = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
+// Clean up any stale rows where Role ('anonymous') was previously stored as user_agent
+try {
+  db.exec(`DELETE FROM listener_sessions WHERE LOWER(user_agent) = 'anonymous' OR LOWER(player) = 'anonymous';`);
+  db.exec(`DELETE FROM events_log WHERE LOWER(player) = 'anonymous';`);
+} catch (_) {}
+
 const upsertSessionStmt = db.prepare(`
   INSERT INTO listener_sessions (
     session_key, client_id, ip, mount, user_agent, player, category, os,
@@ -129,6 +135,11 @@ const upsertSessionStmt = db.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
   ON CONFLICT(session_key) DO UPDATE SET
     client_id = excluded.client_id,
+    user_agent = excluded.user_agent,
+    player = excluded.player,
+    category = excluded.category,
+    os = excluded.os,
+    first_seen = MIN(listener_sessions.first_seen, excluded.first_seen),
     last_seen = excluded.last_seen,
     duration_seconds = MAX(listener_sessions.duration_seconds, excluded.duration_seconds),
     is_active = 1

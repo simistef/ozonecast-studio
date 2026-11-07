@@ -37,7 +37,7 @@ function parseDurationValue(str) {
  * Parses an Icecast User-Agent string into structured telemetry
  */
 function parseUserAgent(uaRaw) {
-  const ua = String(uaRaw || 'Unknown Client').trim();
+  const ua = String(uaRaw || 'Unknown Client').replace(/\s+/g, ' ').trim();
   const lower = ua.toLowerCase();
 
   if (lower.includes('audioaccessory5,')) {
@@ -58,6 +58,16 @@ function parseUserAgent(uaRaw) {
       isRipper: false,
     };
   }
+  if (/^music\/[\d.]+/i.test(ua) && lower.includes('ios/')) {
+    const iosVer = ua.match(/iOS\/([\d.]+)/i)?.[1];
+    return {
+      raw: ua,
+      player: 'Apple Music / HomePod',
+      category: 'Smart Speaker',
+      os: iosVer ? `iOS / audioOS (${iosVer})` : 'iOS / audioOS',
+      isRipper: false,
+    };
+  }
   if (lower.includes('appletv') || lower.includes('apple tv')) {
     return {
       raw: ua,
@@ -73,10 +83,11 @@ function parseUserAgent(uaRaw) {
   let os = 'Unknown';
   let isRipper = false;
 
-  if (lower.includes('iphone') || lower.includes('ipad') || lower.includes('ipod') || lower.includes('cpu os')) {
+  if (lower.includes('iphone') || lower.includes('ipad') || lower.includes('ipod') || lower.includes('cpu os') || lower.includes('ios/')) {
     os = 'iOS';
   } else if (lower.includes('android') || lower.includes('dalvik') || lower.includes('stagefright') || lower.includes('exoplayer')) {
-    os = 'Android';
+    const andVer = ua.match(/Android\s+([\d.]+)/i)?.[1];
+    os = andVer ? `Android ${andVer}` : 'Android';
   } else if (lower.includes('windows nt') || lower.includes('win64') || lower.includes('win32') || lower.includes('windows')) {
     os = 'Windows';
   } else if (lower.includes('mac os x') || lower.includes('macintosh') || lower.includes('darwin')) {
@@ -87,7 +98,29 @@ function parseUserAgent(uaRaw) {
     os = 'Hardware / Embedded';
   }
 
-  if (
+  // Bots, crawlers, and stream monitors first (before generic Mozilla/Chrome checks)
+  if (lower.includes('hisbot') || lower.includes('onlineradiobox')) {
+    player = 'OnlineRadioBox (ORB Bot)';
+    category = 'Bot / Ripper';
+    if (os === 'Unknown') os = 'Linux';
+    isRipper = true;
+  } else if (
+    lower.includes('claudebot') ||
+    lower.includes('gptbot') ||
+    lower.includes('googlebot') ||
+    lower.includes('bingbot') ||
+    lower.includes('yandexbot') ||
+    lower.includes('ahrefsbot') ||
+    lower.includes('semrushbot') ||
+    lower.includes('mj12bot') ||
+    lower.includes('petalsearch')
+  ) {
+    const botMatch = ua.match(/([A-Za-z0-9_-]*Bot)\/[\d.]+/i);
+    player = botMatch ? `${botMatch[1]} Crawler` : 'Web Crawler Bot';
+    category = 'Bot / Ripper';
+    os = 'Crawler / Bot';
+    isRipper = true;
+  } else if (
     lower.includes('streamripper') ||
     (lower.includes('icy-metadata') && lower.includes('wget')) ||
     lower.includes('curl/') ||
@@ -98,6 +131,17 @@ function parseUserAgent(uaRaw) {
     player = ua.split('/')[0] || 'Stream Ripper / CLI';
     category = 'Bot / Ripper';
     isRipper = true;
+  } else if (lower.includes('simpleradio') || lower.includes('com.simpleradio')) {
+    player = 'Simple Radio App';
+    category = 'Mobile / Native';
+    if (os === 'Unknown') os = 'Mobile (iOS / Android)';
+  } else if (lower.includes('radioexpert.net') || lower.includes('radioexpert')) {
+    player = 'RadioExpert.net App';
+    category = 'Mobile / Native';
+  } else if (lower.includes('dalvik/')) {
+    const modelMatch = ua.match(/;\s*([^;)]+?)\s+Build\//i);
+    player = modelMatch ? `Android Audio (${modelMatch[1].trim()})` : 'Android Native Audio';
+    category = 'Mobile / Native';
   } else if (lower.includes('vlc') || lower.includes('libvlc')) {
     const match = ua.match(/(?:VLC|LibVLC)[/\s]([\d.]+)/i);
     player = match ? `VLC ${match[1].split('.').slice(0, 2).join('.')}` : 'VLC Media Player';
@@ -126,8 +170,10 @@ function parseUserAgent(uaRaw) {
     player = 'mpv / MPlayer';
     category = 'Desktop Player';
   } else if (lower.includes('lavf/') || lower.includes('ffmpeg')) {
-    player = 'FFmpeg / Lavf Player';
+    const verMatch = ua.match(/Lavf\/([\d.]+)/i);
+    player = verMatch ? `FFmpeg / Lavf ${verMatch[1]}` : 'FFmpeg / Lavf Player';
     category = 'Desktop Player';
+    if (os === 'Unknown') os = 'Linux / Stream';
   } else if (lower.includes('gstreamer')) {
     player = 'GStreamer Audio';
     category = 'Desktop Player';
@@ -145,6 +191,9 @@ function parseUserAgent(uaRaw) {
   } else if (lower.includes('radiogarden') || lower.includes('radio garden')) {
     player = 'Radio Garden';
     category = 'Mobile / Native';
+  } else if (lower.includes('myradiobox') || lower.includes('my tuner') || lower.includes('mytuner')) {
+    player = 'myTuner Radio';
+    category = 'Mobile / Native';
   } else if (lower.includes('alexa') || lower.includes('echo')) {
     player = 'Amazon Alexa';
     category = 'Smart Speaker';
@@ -160,7 +209,6 @@ function parseUserAgent(uaRaw) {
   } else if (lower.includes('exoplayer') || lower.includes('stagefright') || lower.includes('androidx.media3')) {
     player = 'Android ExoPlayer';
     category = 'Mobile / Native';
-    os = 'Android';
   } else if (lower.includes('cfnetwork') && lower.includes('darwin')) {
     player = 'Apple Native Streamer';
     category = 'Mobile / Native';
@@ -175,7 +223,7 @@ function parseUserAgent(uaRaw) {
     player = 'Firefox (Web)';
     category = 'Web Browser';
   } else if (lower.includes('chrome/') && !lower.includes('edg/')) {
-    player = os === 'Android' ? 'Chrome Mobile (Web)' : 'Chrome (Web)';
+    player = os.startsWith('Android') ? 'Chrome Mobile (Web)' : 'Chrome (Web)';
     category = 'Web Browser';
   } else if (lower.includes('safari/') && !lower.includes('chrome/')) {
     player = os === 'iOS' ? 'Mobile Safari (Web)' : 'Safari (Web)';
@@ -183,7 +231,7 @@ function parseUserAgent(uaRaw) {
   } else if (lower.includes('mozilla/')) {
     player = 'HTML5 Web Player';
     category = 'Web Browser';
-  } else if (ua.length > 0 && ua !== 'Unknown Client') {
+  } else if (ua.length > 0 && ua !== 'Unknown Client' && lower !== 'anonymous') {
     player = ua.split(' ')[0].slice(0, 28);
   }
 
@@ -196,9 +244,18 @@ function parseUserAgent(uaRaw) {
   };
 }
 
+function isIgnoredRoleOrActionCell(val) {
+  if (!val) return true;
+  const s = String(val).replace(/\s+/g, ' ').trim();
+  if (!s || s === '-' || s === '—') return true;
+  if (/^(anonymous|admin|source|relay|kick|move|delete|kill|kick\s+move|move\s+kick)$/i.test(s)) return true;
+  return false;
+}
+
 /**
  * Universal parser for Icecast /admin/listclients.xsl:
- * Supports XML, HTML tables, single-line tab/space copy-paste, and multi-line cell copy-paste,
+ * Supports XML, 4-column and 7-column HTML tables (ignoring Username & Role="anonymous"),
+ * single-line tab/space copy-paste, and multi-line cell copy-paste,
  * across IPv4, ::ffff:IPv4, and IPv6 addresses.
  */
 function parseIcecastClientsPayload(bodyText, targetMount = '/listen') {
@@ -225,7 +282,7 @@ function parseIcecastClientsPayload(bodyText, targetMount = '/listen') {
           .map((item, idx) => {
             const ip = String(item.IP || item.ip || '').trim().replace(/^::ffff:/i, '');
             const connectedSec = parseInt(item.Connected ?? item.connected ?? 0, 10) || 0;
-            const userAgent = String(item.UserAgent || item.useragent || item['User-Agent'] || 'Unknown').trim();
+            const userAgent = String(item.UserAgent || item.useragent || item['User-Agent'] || 'Unknown').replace(/\s+/g, ' ').trim();
             const id = String(item.ID ?? item.id ?? item['@_id'] ?? `${1000 + idx}`);
             return {
               clientId: id,
@@ -250,41 +307,111 @@ function parseIcecastClientsPayload(bodyText, targetMount = '/listen') {
     } catch (_) {}
   }
 
-  // 2. Check HTML table format
+  // 2. Check HTML table format (supports both 4-column Icecast and 7-column Icecast with Username/Role/Location)
   if (text.includes('<tr') || text.includes('<td') || text.includes('<table')) {
     const $ = cheerio.load(text);
     const listeners = [];
 
-    $('tr').each((rIdx, tr) => {
-      const cells = $(tr).find('td');
-      if (cells.length < 2) return;
+    $('table').each((_, table) => {
+      // Detect header column indices if present (IP | Username | Role | Sec. connected | User Agent | Location | Action)
+      let ipColIdx = 0;
+      let secColIdx = null;
+      let uaColIdx = null;
 
-      const col0 = $(cells[0]).text().trim();
-      if (!isIpToken(col0)) return;
-
-      const col1 = $(cells[1]).text().trim();
-      const col2 = cells.length >= 3 ? $(cells[2]).text().trim() : 'Unknown Client';
-
-      let clientId = `${1000 + listeners.length}`;
-      let mountFromLink = targetMount;
-      $(tr)
-        .find('a')
-        .each((__, a) => {
-          const href = $(a).attr('href') || '';
-          const idMatch = href.match(/[?&]id=([^&]+)/i);
-          if (idMatch) clientId = idMatch[1];
-          const mountMatch = href.match(/[?&]mount=([^&]+)/i);
-          if (mountMatch) mountFromLink = decodeURIComponent(mountMatch[1]);
+      $(table)
+        .find('tr')
+        .each((__, tr) => {
+          const headerCells = $(tr).find('th, td');
+          if (headerCells.length < 3) return;
+          const texts = headerCells
+            .map((___, c) => $(c).text().replace(/\s+/g, ' ').trim().toLowerCase())
+            .get();
+          if (texts[0] === 'ip' || texts.some(t => t.includes('sec. connected') || t.includes('user agent'))) {
+            texts.forEach((h, idx) => {
+              if (h === 'ip' || h === 'ip address') ipColIdx = idx;
+              else if (h.includes('sec') || h.includes('connected') || h === 'duration') secColIdx = idx;
+              else if (h.includes('user agent') || h.includes('user-agent') || h === 'agent') uaColIdx = idx;
+            });
+          }
         });
 
-      listeners.push({
-        clientId: String(clientId),
-        ip: col0.replace(/^::ffff:/i, ''),
-        connectedSeconds: parseDurationValue(col1),
-        userAgent: col2 || 'Unknown Client',
-        lag: 0,
-        mount: mountFromLink,
-      });
+      $(table)
+        .find('tr')
+        .each((rIdx, tr) => {
+          const cells = $(tr).find('td');
+          if (cells.length < 2) return;
+
+          const cellTexts = cells
+            .map((__, c) => $(c).text().replace(/\s+/g, ' ').trim())
+            .get();
+
+          const rawIp = cellTexts[ipColIdx] || cellTexts[0];
+          if (!isIpToken(rawIp)) return;
+
+          let connectedSec = 0;
+          let userAgent = '';
+
+          // Strategy A: Use detected header indices if valid
+          if (
+            secColIdx !== null &&
+            secColIdx < cellTexts.length &&
+            /^\d+$/.test(cellTexts[secColIdx])
+          ) {
+            connectedSec = parseDurationValue(cellTexts[secColIdx]);
+          }
+          if (
+            uaColIdx !== null &&
+            uaColIdx < cellTexts.length &&
+            !isIgnoredRoleOrActionCell(cellTexts[uaColIdx])
+          ) {
+            userAgent = cellTexts[uaColIdx];
+          }
+
+          // Strategy B: Cell-content scan (skips empty Username, "anonymous" Role, and "Kick/Move" Action)
+          if (!connectedSec || !userAgent) {
+            let foundSecIdx = -1;
+            for (let cIdx = 1; cIdx < cellTexts.length; cIdx++) {
+              const val = cellTexts[cIdx];
+              if (!val || isIgnoredRoleOrActionCell(val)) continue;
+              if (foundSecIdx === -1 && (/^\d+$/.test(val) || /^\d+:\d+(?::\d+)?$/.test(val))) {
+                foundSecIdx = cIdx;
+                if (!connectedSec) connectedSec = parseDurationValue(val);
+                continue;
+              }
+              if (!userAgent && !/^\d+$/.test(val)) {
+                userAgent = val;
+                break;
+              }
+            }
+          }
+
+          // Strip any trailing Kick / Move text if merged
+          userAgent = userAgent.replace(/\s*(?:Kick|Move|Delete|Kill)(?:\s+(?:Kick|Move|Delete|Kill))*\s*$/i, '').trim();
+          if (!userAgent || isIgnoredRoleOrActionCell(userAgent)) {
+            userAgent = 'Unknown Client';
+          }
+
+          let clientId = `${1000 + listeners.length}`;
+          let mountFromLink = targetMount;
+          $(tr)
+            .find('a')
+            .each((__, a) => {
+              const href = $(a).attr('href') || '';
+              const idMatch = href.match(/[?&]id=([^&]+)/i);
+              if (idMatch) clientId = idMatch[1];
+              const mountMatch = href.match(/[?&]mount=([^&]+)/i);
+              if (mountMatch) mountFromLink = decodeURIComponent(mountMatch[1]);
+            });
+
+          listeners.push({
+            clientId: String(clientId),
+            ip: rawIp.replace(/^::ffff:/i, ''),
+            connectedSeconds: connectedSec,
+            userAgent,
+            lag: 0,
+            mount: mountFromLink,
+          });
+        });
     });
 
     if (listeners.length > 0) {
@@ -301,25 +428,34 @@ function parseIcecastClientsPayload(bodyText, targetMount = '/listen') {
   const rawLines = text
     .split(/\r?\n/)
     .map(l => l.trim())
-    .filter(l => l.length > 0 && !/^(IP|Sec\.\s*connected|Connected|User\s*Agent|Action|Mountpoint|List\s*Clients)/i.test(l));
+    .filter(
+      l =>
+        l.length > 0 &&
+        !/^(IP|Username|Role|Sec\.\s*connected|connected|User\s*Agent|Location|Action|Mountpoint|List\s*Clients|Listeners|Move|Kick|anonymous)$/i.test(l)
+    );
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
-    const tokens = line.split(/\s+/);
+    let tokens = line.split(/\s+/);
     const firstToken = tokens[0];
 
     if (!isIpToken(firstToken)) continue;
     const cleanIp = firstToken.replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '');
 
-    // Case A: IP + Seconds + UserAgent on the same line (tab or space separated)
-    if (tokens.length >= 2 && (/^\d+$/.test(tokens[1]) || /^\d+:\d+/.test(tokens[1]))) {
-      const sec = parseDurationValue(tokens[1]);
-      let uaTokens = tokens.slice(2);
-      // If Icecast-KH has a numeric Lag column right after Connected seconds
+    // Remove "anonymous" role token if it appears right after IP
+    let restTokens = tokens.slice(1).filter((t, idx) => !(idx === 0 && /^anonymous$/i.test(t)));
+
+    // Case A: IP + [anonymous] + Seconds + UserAgent on the same line (tab or space separated)
+    if (restTokens.length >= 1 && (/^\d+$/.test(restTokens[0]) || /^\d+:\d+/.test(restTokens[0]))) {
+      const sec = parseDurationValue(restTokens[0]);
+      let uaTokens = restTokens.slice(1);
       if (uaTokens.length >= 2 && /^\d+$/.test(uaTokens[0])) {
         uaTokens = uaTokens.slice(1);
       }
-      let ua = uaTokens.join(' ').replace(/\s*(?:Kick|Delete|Kill)\s*$/i, '').trim();
+      let ua = uaTokens
+        .join(' ')
+        .replace(/\s*(?:Kick|Move|Delete|Kill)(?:\s+(?:Kick|Move|Delete|Kill))*\s*$/i, '')
+        .trim();
       if (!ua) ua = 'Audio Stream Client';
       plainListeners.push({
         clientId: String(1000 + plainListeners.length),
@@ -332,33 +468,38 @@ function parseIcecastClientsPayload(bodyText, targetMount = '/listen') {
       continue;
     }
 
-    // Case B: Multi-line copy where IP is on line i, Seconds is on line i+1, User-Agent on line i+2
-    if (tokens.length === 1 && i + 1 < rawLines.length && (/^\d+$/.test(rawLines[i + 1]) || /^\d+:\d+/.test(rawLines[i + 1]))) {
+    // Case B: Multi-line copy where IP is on line i, Seconds is on line i+1, User-Agent on line i+2 (and possibly wrapped across lines)
+    if (restTokens.length === 0 && i + 1 < rawLines.length && (/^\d+$/.test(rawLines[i + 1]) || /^\d+:\d+/.test(rawLines[i + 1]))) {
       const sec = parseDurationValue(rawLines[i + 1]);
-      let ua = 'Audio Stream Client';
-      let advance = 1;
-      if (i + 2 < rawLines.length && !isIpToken(rawLines[i + 2].split(/\s+/)[0]) && !/^(Kick|Delete)$/i.test(rawLines[i + 2])) {
-        ua = rawLines[i + 2].replace(/\s*(?:Kick|Delete)\s*$/i, '').trim();
-        advance = 2;
-        if (i + 3 < rawLines.length && /^(Kick|Delete)$/i.test(rawLines[i + 3])) {
-          advance = 3;
+      const uaParts = [];
+      let cursor = i + 2;
+      while (cursor < rawLines.length) {
+        const nextLine = rawLines[cursor];
+        if (isIpToken(nextLine.split(/\s+/)[0])) break;
+        const cleaned = nextLine.replace(/\s*(?:Kick|Move|Delete|Kill)(?:\s+(?:Kick|Move|Delete|Kill))*\s*$/i, '').trim();
+        if (cleaned && !/^(Kick|Move|Delete|Kill|anonymous)$/i.test(cleaned)) {
+          uaParts.push(cleaned);
         }
+        cursor++;
       }
       plainListeners.push({
         clientId: String(1000 + plainListeners.length),
         ip: cleanIp,
         connectedSeconds: sec,
-        userAgent: ua,
+        userAgent: uaParts.join(' ') || 'Audio Stream Client',
         lag: 0,
         mount: targetMount,
       });
-      i += advance;
+      i = cursor - 1;
       continue;
     }
 
     // Case C: Line has IP and User-Agent without numeric seconds
-    if (tokens.length >= 2) {
-      const ua = tokens.slice(1).join(' ').replace(/\s*(?:Kick|Delete)\s*$/i, '').trim();
+    if (restTokens.length >= 1) {
+      const ua = restTokens
+        .join(' ')
+        .replace(/\s*(?:Kick|Move|Delete|Kill)(?:\s+(?:Kick|Move|Delete|Kill))*\s*$/i, '')
+        .trim();
       plainListeners.push({
         clientId: String(1000 + plainListeners.length),
         ip: cleanIp,

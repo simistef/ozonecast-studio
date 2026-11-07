@@ -687,7 +687,11 @@
             <td>
               <div style="display:flex;align-items:center;gap:7px">
                 <span class="country-code-pill">${escapeHtml(r.geo?.countryCode || 'UN')}</span>
-                <span>${escapeHtml(r.geo?.city || 'Unknown')}, <span style="color:var(--text-secondary)">${escapeHtml(r.geo?.countryName || '')}</span></span>
+                <span>${
+                  r.geo?.city && r.geo.city !== r.geo.countryName && r.geo.city !== 'Unknown City'
+                    ? `${escapeHtml(r.geo.city)}, <span style="color:var(--text-secondary)">${escapeHtml(r.geo?.countryName || '')}</span>`
+                    : `${escapeHtml(r.geo?.countryName || r.geo?.city || 'Unknown')}`
+                }</span>
               </div>
             </td>
             <td>

@@ -10,3 +10,4 @@ data/*.sqlite-wal
 .gitconfig
 npm-debug.log*
 image.png
+image_2.png
