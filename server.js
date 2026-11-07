@@ -9,6 +9,8 @@ const {
   getTopReturningListeners,
   getAggregatedStats,
   getIpHistory,
+  getIpAliasesMap,
+  setIpAlias,
   logCustomEvent,
 } = require('./src/db');
 const { parseUserAgent, parseIcecastClientsPayload } = require('./src/parser');
@@ -340,6 +342,13 @@ app.get('/api/dashboard', async (req, res) => {
   const topReturningListeners = getTopReturningListeners(5, modeForHistory);
   const stats24h = getAggregatedStats(modeForHistory);
   const config = getConfig();
+  const ipAliases = getIpAliasesMap();
+
+  const listenersWithAliases = latestState.listeners.map(l => ({
+    ...l,
+    friendlyName: ipAliases[l.ip]?.friendlyName || '',
+    notes: ipAliases[l.ip]?.notes || '',
+  }));
 
   res.json({
     ok: true,
@@ -377,7 +386,8 @@ app.get('/api/dashboard', async (req, res) => {
       returningListenerCount: stats24h.returningListenerCount,
       maxCapacity: latestState.sourceMeta.maxListeners || config.maxListenersCapacity || 500,
     },
-    listeners: latestState.listeners,
+    listeners: listenersWithAliases,
+    ipAliases,
     breakdowns: {
       countries: breakdowns.countries,
       cities: breakdowns.cities,
@@ -408,10 +418,24 @@ app.get('/api/ip/:ip', (req, res) => {
   res.json({
     ok: true,
     ip: geo.ip,
+    friendlyName: history.friendlyName || '',
+    notes: history.notes || '',
     geo,
     activeConnections: activeMatches,
     history,
   });
+});
+
+// API: Save or clear friendly name / alias for an IP address
+app.post('/api/ip/:ip/alias', (req, res) => {
+  try {
+    const geo = lookupIp(req.params.ip);
+    const { friendlyName, notes } = req.body || {};
+    const saved = setIpAlias(geo.ip, friendlyName, notes);
+    res.json({ ok: true, alias: saved });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
 });
 
 // API: Kick client

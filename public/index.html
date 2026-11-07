@@ -362,7 +362,7 @@
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-            <input type="search" id="clientSearchInput" class="search-input" placeholder="Filter by IP, city, country, player, or User-Agent..." />
+            <input type="search" id="clientSearchInput" class="search-input" placeholder="Filter by IP, friendly name, city, country, player..." />
           </div>
 
           <select id="categoryFilterSelect" class="select-control" aria-label="Filter by client category">
@@ -383,19 +383,17 @@
         <table class="clients-table" id="clientsTable">
           <thead>
             <tr>
-              <th data-sort="clientId">Client ID</th>
-              <th data-sort="ip">IP Address</th>
+              <th data-sort="ip">IP Address / Listener</th>
               <th data-sort="location">Location (City / Country)</th>
               <th data-sort="connectedSeconds">Connected Time ↓</th>
               <th data-sort="player">Player / User-Agent</th>
               <th data-sort="os">OS / Category</th>
-              <th>Mount</th>
               <th>Admin Actions</th>
             </tr>
           </thead>
           <tbody id="clientsTableBody">
             <tr>
-              <td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted)">Loading active Icecast listeners...</td>
+              <td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">Loading active Icecast listeners...</td>
             </tr>
           </tbody>
         </table>

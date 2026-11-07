@@ -339,15 +339,19 @@
           item.city && item.city !== item.countryName && item.city !== 'Unknown City'
             ? `${escapeHtml(item.city)}, <span style="color:var(--text-secondary)">${escapeHtml(item.countryName || item.countryCode)}</span>`
             : escapeHtml(item.countryName || item.city || item.countryCode);
+        const nameBadge = item.friendlyName
+          ? `<span style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.38);border-radius:4px;padding:1px 6px;font-size:11.5px;font-weight:600">${escapeHtml(item.friendlyName)}</span>`
+          : '';
         return `
           <div class="event-row" style="padding:10px 12px">
             <div style="display:flex;align-items:center;gap:10px;min-width:0">
               <span class="mono" style="font-weight:700;font-size:13px;color:var(--accent-amber);width:22px">#${item.rank}</span>
               <div style="min-width:0">
                 <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-                  <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(item.ip)}" onclick="document.querySelector('[data-inspect-ip=\\'${escapeHtml(item.ip)}\\']')?.click()">
+                  <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(item.ip)}" title="Click to set friendly name or inspect history">
                     ${escapeHtml(item.ip)}
                   </button>
+                  ${nameBadge}
                   ${renderCountryFlag(item.countryCode, item.countryName, 18)}
                   <span style="font-weight:500">${locLabel}</span>
                   ${statusBadge}
@@ -365,6 +369,10 @@
         `;
       })
       .join('');
+
+    container.querySelectorAll('[data-inspect-ip]').forEach(btn => {
+      btn.addEventListener('click', () => openIpInspector(btn.getAttribute('data-inspect-ip')));
+    });
   }
 
   function renderGeoBreakdown(breakdowns) {
@@ -624,26 +632,23 @@
       rows = rows.filter(
         r =>
           r.ip.toLowerCase().includes(q) ||
+          (r.friendlyName || '').toLowerCase().includes(q) ||
+          (r.notes || '').toLowerCase().includes(q) ||
           (r.geo?.city || '').toLowerCase().includes(q) ||
           (r.geo?.countryName || '').toLowerCase().includes(q) ||
           (r.geo?.countryCode || '').toLowerCase().includes(q) ||
           (r.ua?.player || '').toLowerCase().includes(q) ||
           (r.ua?.os || '').toLowerCase().includes(q) ||
-          (r.userAgent || '').toLowerCase().includes(q) ||
-          String(r.clientId).toLowerCase().includes(q)
+          (r.userAgent || '').toLowerCase().includes(q)
       );
     }
 
     rows.sort((a, b) => {
       let va, vb;
       switch (tableSortField) {
-        case 'clientId':
-          va = Number(a.clientId) || a.clientId;
-          vb = Number(b.clientId) || b.clientId;
-          break;
         case 'ip':
-          va = a.ip;
-          vb = b.ip;
+          va = (a.friendlyName || a.ip).toLowerCase();
+          vb = (b.friendlyName || b.ip).toLowerCase();
           break;
         case 'location':
           va = `${a.geo?.countryName || ''} ${a.geo?.city || ''}`;
@@ -675,7 +680,7 @@
     if (rows.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="8" style="text-align:center;padding:28px;color:var(--text-muted)">
+          <td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted)">
             No active listeners match the current filter.
           </td>
         </tr>
@@ -692,17 +697,22 @@
             ? `<span class="dup-badge" title="${r.connectionsFromIp} simultaneous connections from this IP">${r.connectionsFromIp}x</span>`
             : '';
         const catClass = r.ua?.isRipper ? 'ripper' : '';
+        const friendlyBadgeHtml = r.friendlyName
+          ? `<button type="button" data-inspect-ip="${escapeHtml(r.ip)}" style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.42);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600;cursor:pointer;text-align:left" title="Click to edit friendly name or inspect IP">${escapeHtml(r.friendlyName)}</button>`
+          : '';
 
         return `
           <tr data-client-id="${escapeHtml(r.clientId)}">
-            <td class="mono" style="color:var(--text-secondary)">#${escapeHtml(r.clientId)}</td>
             <td>
-              <div class="ip-cell">
-                <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(r.ip)}" title="Inspect SQLite session history &amp; GeoIP for ${escapeHtml(r.ip)}">
-                  ${escapeHtml(r.ip)}
-                </button>
-                <button type="button" class="copy-ip-btn" data-copy-ip="${escapeHtml(r.ip)}" title="Copy IP address">Copy</button>
-                ${dupHtml}
+              <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
+                ${friendlyBadgeHtml}
+                <div class="ip-cell">
+                  <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(r.ip)}" title="Click to assign a friendly name &amp; view session history for ${escapeHtml(r.ip)}">
+                    ${escapeHtml(r.ip)}
+                  </button>
+                  <button type="button" class="copy-ip-btn" data-copy-ip="${escapeHtml(r.ip)}" title="Copy IP address">Copy</button>
+                  ${dupHtml}
+                </div>
               </div>
             </td>
             <td>
@@ -733,10 +743,9 @@
                 <span style="font-size:12px;color:var(--text-secondary)">${escapeHtml(r.ua?.os || '')}</span>
               </div>
             </td>
-            <td class="mono" style="color:var(--accent-amber);font-size:12px">${escapeHtml(r.mount || '/listen')}</td>
             <td>
               <div style="display:flex;align-items:center;gap:6px">
-                <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(r.ip)}">History</button>
+                <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(r.ip)}" title="Set friendly name &amp; view history">Name / History</button>
                 <button type="button" class="btn btn-danger-ghost" data-kick-id="${escapeHtml(r.clientId)}" data-kick-ip="${escapeHtml(r.ip)}">Kick</button>
               </div>
             </td>
@@ -760,7 +769,7 @@
     });
   }, 1000);
 
-  // Open IP Dossier Modal
+  // Open IP Dossier & Friendly Name Modal
   async function openIpInspector(ip) {
     const backdrop = document.getElementById('ipModalBackdrop');
     const title = document.getElementById('ipModalTitle');
@@ -779,11 +788,30 @@
         return;
       }
 
-      const { geo, activeConnections, history } = data;
+      const { geo, activeConnections, history, friendlyName } = data;
       const sum = history?.summary || {};
       const sessions = history?.sessions || [];
+      const currentName = friendlyName || history?.friendlyName || '';
+
+      title.textContent = currentName ? `${currentName} (${ip})` : `Listener Dossier — ${ip}`;
 
       content.innerHTML = `
+        <form id="ipAliasForm" style="background:var(--bg-elevated);padding:12px 14px;border-radius:8px;border:1px solid var(--border-strong);display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <label for="ipFriendlyNameInput" style="font-size:11.5px;font-weight:700;color:var(--accent-amber);letter-spacing:0.04em">FRIENDLY NAME FOR ${escapeHtml(ip)}</label>
+            <span style="font-size:11px;color:var(--text-muted)">Saved in SQLite</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="ipFriendlyNameInput" class="form-input" placeholder="e.g. My HomePod mini, Studio Monitor, DJ Alex..." value="${escapeHtml(currentName)}" style="flex:1" autocomplete="off" />
+            <button type="submit" class="btn btn-primary" style="white-space:nowrap">Save Name</button>
+            ${
+              currentName
+                ? `<button type="button" id="clearIpAliasBtn" class="btn btn-danger-ghost" style="white-space:nowrap">Remove</button>`
+                : ''
+            }
+          </div>
+        </form>
+
         <div class="form-grid-2" style="background:var(--bg-canvas);padding:12px 14px;border-radius:8px;border:1px solid var(--border-subtle)">
           <div>
             <div style="font-size:11px;color:var(--text-muted)">LOCATION</div>
@@ -800,7 +828,7 @@
         </div>
 
         <div style="font-size:12.5px;font-weight:600;margin-top:4px">Recent Sessions from ${escapeHtml(ip)}</div>
-        <div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto">
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto">
           ${
             sessions.length === 0
               ? `<div style="color:var(--text-muted);font-size:12px">No stored sessions yet.</div>`
@@ -823,6 +851,41 @@
           }
         </div>
       `;
+
+      const nameInput = document.getElementById('ipFriendlyNameInput');
+      if (nameInput) {
+        setTimeout(() => {
+          nameInput.focus();
+          nameInput.select();
+        }, 40);
+      }
+
+      document.getElementById('ipAliasForm')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const newName = (document.getElementById('ipFriendlyNameInput')?.value || '').trim();
+        const saveRes = await fetch(`/api/ip/${encodeURIComponent(ip)}/alias`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ friendlyName: newName }),
+        });
+        const saveData = await saveRes.json();
+        if (saveData.ok) {
+          showToast(newName ? `Named ${ip} "${newName}"` : `Cleared friendly name for ${ip}`);
+          title.textContent = newName ? `${newName} (${ip})` : `Listener Dossier — ${ip}`;
+          await fetchDashboard();
+        }
+      });
+
+      document.getElementById('clearIpAliasBtn')?.addEventListener('click', async () => {
+        await fetch(`/api/ip/${encodeURIComponent(ip)}/alias`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ friendlyName: '' }),
+        });
+        showToast(`Cleared friendly name for ${ip}`);
+        await fetchDashboard();
+        openIpInspector(ip);
+      });
     } catch (err) {
       content.innerHTML = `<div style="color:var(--accent-crimson)">Error: ${escapeHtml(err.message)}</div>`;
     }

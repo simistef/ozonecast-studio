@@ -69,6 +69,13 @@ db.exec(`
     mount TEXT DEFAULT '/listen'
   );
   CREATE INDEX IF NOT EXISTS idx_events_ts ON events_log(ts DESC);
+
+  CREATE TABLE IF NOT EXISTS ip_aliases (
+    ip TEXT PRIMARY KEY,
+    friendly_name TEXT NOT NULL,
+    notes TEXT DEFAULT '',
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 const DEFAULT_CONFIG = {
@@ -382,10 +389,62 @@ function getTimeOfDayProfile(sourceMode = 'live') {
   };
 }
 
+function getIpAliasesMap() {
+  const rows = db.prepare('SELECT ip, friendly_name, notes, updated_at FROM ip_aliases').all();
+  const map = {};
+  for (const r of rows) {
+    map[r.ip] = {
+      ip: r.ip,
+      friendlyName: r.friendly_name,
+      notes: r.notes || '',
+      updatedAt: r.updated_at,
+    };
+  }
+  return map;
+}
+
+function getIpAlias(ip) {
+  const clean = String(ip || '').trim();
+  if (!clean) return null;
+  const r = db.prepare('SELECT ip, friendly_name, notes, updated_at FROM ip_aliases WHERE ip = ?').get(clean);
+  if (!r) return null;
+  return {
+    ip: r.ip,
+    friendlyName: r.friendly_name,
+    notes: r.notes || '',
+    updatedAt: r.updated_at,
+  };
+}
+
+function setIpAlias(ip, friendlyName, notes = '') {
+  const cleanIp = String(ip || '').trim();
+  if (!cleanIp) throw new Error('IP address is required');
+  const cleanName = String(friendlyName || '').trim();
+  const cleanNotes = String(notes || '').trim();
+  const now = Date.now();
+
+  if (!cleanName) {
+    db.prepare('DELETE FROM ip_aliases WHERE ip = ?').run(cleanIp);
+    return { ip: cleanIp, friendlyName: '', notes: '', updatedAt: now };
+  }
+
+  db.prepare(`
+    INSERT INTO ip_aliases (ip, friendly_name, notes, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(ip) DO UPDATE SET
+      friendly_name = excluded.friendly_name,
+      notes = excluded.notes,
+      updated_at = excluded.updated_at
+  `).run(cleanIp, cleanName, cleanNotes, now);
+
+  return { ip: cleanIp, friendlyName: cleanName, notes: cleanNotes, updatedAt: now };
+}
+
 /**
  * Returns the Top N Returning Listeners ranked by distinct session visits & cumulative connected time.
  */
 function getTopReturningListeners(limit = 5, sourceMode = 'live') {
+  const aliases = getIpAliasesMap();
   const rows = db
     .prepare(`
       SELECT
@@ -414,6 +473,8 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live') {
   return rows.map((r, idx) => ({
     rank: idx + 1,
     ip: r.ip,
+    friendlyName: aliases[r.ip]?.friendlyName || '',
+    notes: aliases[r.ip]?.notes || '',
     sessionCount: Number(r.session_count) || 1,
     totalDurationSeconds: Number(r.total_duration_seconds) || 0,
     avgDurationSeconds: Number(r.avg_duration_seconds) || 0,
@@ -498,7 +559,14 @@ function getIpHistory(ip) {
       WHERE ip = ?
     `)
     .get(ip);
-  return { ip, summary, sessions };
+  const alias = getIpAlias(ip);
+  return {
+    ip,
+    friendlyName: alias?.friendlyName || '',
+    notes: alias?.notes || '',
+    summary,
+    sessions,
+  };
 }
 
 function logCustomEvent(type, details, ip = '', mount = '/listen') {
@@ -515,5 +583,8 @@ module.exports = {
   getTopReturningListeners,
   getAggregatedStats,
   getIpHistory,
+  getIpAliasesMap,
+  getIpAlias,
+  setIpAlias,
   logCustomEvent,
 };

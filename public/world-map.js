@@ -411,7 +411,13 @@
           .map(
             c =>
               '<div class="mono" style="font-size:11px;color:var(--text-secondary)">' +
-              c.ip +
+              (c.friendlyName
+                ? '<strong style="color:var(--accent-amber)">' +
+                  c.friendlyName.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
+                  '</strong> (' +
+                  c.ip +
+                  ')'
+                : c.ip) +
               ' • ' +
               c.ua.player +
               '</div>'
