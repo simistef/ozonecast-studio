@@ -714,7 +714,11 @@
           r.connectionsFromIp > 1
             ? `<span class="dup-badge" title="${r.connectionsFromIp} simultaneous connections from this IP">${r.connectionsFromIp}x</span>`
             : '';
-        const catClass = r.ua?.isRipper ? 'ripper' : '';
+        const isBot = Boolean(r.isBot || r.isManualBot || r.ua?.isRipper || r.ua?.category === 'Bot / Ripper');
+        const catClass = isBot ? 'ripper' : '';
+        const botBtnHtml = isBot
+          ? `<button type="button" class="btn btn-warning-ghost" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(r.ip)}" data-bot-state="1" title="Marked as Bot / Ripper. Click to remove bot classification">🤖 Unmark Bot</button>`
+          : `<button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(r.ip)}" data-bot-state="0" title="Flag this IP as a Bot or Stream Ripper">🤖 Mark Bot</button>`;
         const friendlyBadgeHtml = r.friendlyName
           ? `<button type="button" data-inspect-ip="${escapeHtml(r.ip)}" style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.42);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600;cursor:pointer;text-align:left" title="Click to edit friendly name or inspect IP">${escapeHtml(r.friendlyName)}</button>`
           : '';
@@ -757,13 +761,14 @@
             </td>
             <td>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span class="cat-tag ${catClass}">${escapeHtml(r.ua?.category || 'Client')}</span>
+                <span class="cat-tag ${catClass}">${isBot ? '🤖 Bot / Ripper' : escapeHtml(r.ua?.category || 'Client')}</span>
                 <span style="font-size:12px;color:var(--text-secondary)">${escapeHtml(r.ua?.os || '')}</span>
               </div>
             </td>
             <td>
               <div style="display:flex;align-items:center;gap:6px">
                 <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(r.ip)}" title="Set friendly name &amp; view history">Name / History</button>
+                ${botBtnHtml}
                 <button type="button" class="btn btn-danger-ghost" data-kick-id="${escapeHtml(r.clientId)}" data-kick-ip="${escapeHtml(r.ip)}">Kick</button>
               </div>
             </td>
@@ -810,6 +815,7 @@
       const sum = history?.summary || {};
       const sessions = history?.sessions || [];
       const currentName = friendlyName || history?.friendlyName || '';
+      const isBot = Boolean(history?.isBot);
 
       title.textContent = currentName ? `${currentName} (${ip})` : `Listener Dossier — ${ip}`;
 
@@ -829,6 +835,18 @@
             }
           </div>
         </form>
+
+        <div style="background:var(--bg-elevated);padding:10px 14px;border-radius:8px;border:1px solid ${isBot ? 'hsla(355,84%,60%,0.4)' : 'var(--border-subtle)'};display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.04em">BOT / RIPPER CLASSIFICATION</div>
+            <div style="font-size:12.5px;margin-top:2px">
+              ${isBot ? '<span style="color:var(--accent-crimson);font-weight:700">🤖 Flagged as Bot / Ripper</span> — Excluded from Top 5 Returning Listeners' : '<span style="color:var(--accent-emerald);font-weight:600">👤 Standard Listener</span> — Included in listener analytics'}
+            </div>
+          </div>
+          <button type="button" id="modalToggleBotBtn" class="btn ${isBot ? 'btn-warning-ghost' : 'btn'}" style="white-space:nowrap;padding:5px 12px">
+            ${isBot ? 'Remove Bot Flag' : '🤖 Flag as Bot / Ripper'}
+          </button>
+        </div>
 
         <div class="form-grid-2" style="background:var(--bg-canvas);padding:12px 14px;border-radius:8px;border:1px solid var(--border-subtle)">
           <div>
@@ -877,6 +895,21 @@
           nameInput.select();
         }, 40);
       }
+
+      document.getElementById('modalToggleBotBtn')?.addEventListener('click', async () => {
+        const nextState = !isBot;
+        const botRes = await fetch(`/api/ip/${encodeURIComponent(ip)}/bot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isBot: nextState }),
+        });
+        const botData = await botRes.json();
+        if (botData.ok) {
+          showToast(nextState ? `Flagged ${ip} as Bot / Ripper` : `Removed Bot flag from ${ip}`);
+          await fetchDashboard();
+          openIpInspector(ip);
+        }
+      });
 
       document.getElementById('ipAliasForm')?.addEventListener('submit', async e => {
         e.preventDefault();
@@ -1017,6 +1050,36 @@
           showToast(`Copied IP ${ip} to clipboard`);
         } catch (_) {
           showToast(`IP: ${ip}`);
+        }
+        return;
+      }
+
+      const botBtn = e.target.closest('[data-bot-ip]');
+      if (botBtn) {
+        const ip = botBtn.getAttribute('data-bot-ip');
+        const currentState = botBtn.getAttribute('data-bot-state') === '1';
+        const newState = !currentState;
+        botBtn.disabled = true;
+        botBtn.textContent = newState ? 'Marking...' : 'Unmarking...';
+        try {
+          const res = await fetch(`/api/ip/${encodeURIComponent(ip)}/bot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isBot: newState }),
+          });
+          const data = await res.json();
+          if (data.ok) {
+            showToast(newState ? `Flagged ${ip} as Bot / Ripper (excluded from Top 5)` : `Removed Bot flag from ${ip}`);
+            await fetchDashboard();
+          } else {
+            showToast(`Error: ${data.error}`);
+            botBtn.disabled = false;
+            botBtn.textContent = currentState ? '🤖 Unmark Bot' : '🤖 Mark Bot';
+          }
+        } catch (err) {
+          showToast(`Request failed: ${err.message}`);
+          botBtn.disabled = false;
+          botBtn.textContent = currentState ? '🤖 Unmark Bot' : '🤖 Mark Bot';
         }
         return;
       }

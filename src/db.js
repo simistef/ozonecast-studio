@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
+const { parseUserAgent } = require('./parser');
 
 function openDatabaseWithFallback() {
   const primaryDir = path.join(__dirname, '..', 'data');
@@ -92,6 +93,12 @@ db.exec(`
     friendly_name TEXT NOT NULL,
     notes TEXT DEFAULT '',
     updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS bot_ips (
+    ip TEXT PRIMARY KEY,
+    reason TEXT DEFAULT '',
+    created_at INTEGER NOT NULL
   );
 `);
 
@@ -504,6 +511,7 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live') {
       WHERE source_mode = ?
         AND (? = 0 OR (
           category != 'Bot / Ripper'
+          AND ip NOT IN (SELECT ip FROM bot_ips)
           AND LOWER(user_agent) NOT LIKE '%bot%'
           AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
           AND LOWER(user_agent) NOT LIKE '%crawler%'
@@ -575,9 +583,12 @@ function getAggregatedStats(sourceMode = 'live') {
         WHERE source_mode = ?
           AND (? = 0 OR (
             category != 'Bot / Ripper'
+            AND ip NOT IN (SELECT ip FROM bot_ips)
             AND LOWER(user_agent) NOT LIKE '%bot%'
             AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
             AND LOWER(user_agent) NOT LIKE '%crawler%'
+            AND LOWER(user_agent) NOT LIKE '%spider%'
+            AND LOWER(user_agent) NOT LIKE '%streamripper%'
           ))
         GROUP BY ip
         HAVING COUNT(*) > 1 AND AVG(duration_seconds) >= ?
@@ -605,6 +616,51 @@ function getAggregatedStats(sourceMode = 'live') {
   };
 }
 
+function getBotIpsSet() {
+  const rows = db.prepare('SELECT ip FROM bot_ips').all();
+  return new Set(rows.map(r => r.ip));
+}
+
+function isBotIp(ip) {
+  if (!ip) return false;
+  return Boolean(db.prepare('SELECT 1 FROM bot_ips WHERE ip = ?').get(ip));
+}
+
+function setBotIp(ip, isBot, reason = '') {
+  const cleanIp = String(ip || '').trim();
+  if (!cleanIp) return false;
+  const now = Date.now();
+
+  if (isBot) {
+    db.prepare(`
+      INSERT INTO bot_ips (ip, reason, created_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason, created_at = excluded.created_at
+    `).run(cleanIp, String(reason || 'Manually marked as Bot / Ripper'), now);
+
+    db.prepare(`
+      UPDATE listener_sessions
+      SET category = 'Bot / Ripper'
+      WHERE ip = ?
+    `).run(cleanIp);
+
+    insertEventStmt.run(now, 'bot_flag', cleanIp, '', '', 'Bot / Ripper', 0, 'Flagged as Bot / Ripper', '/listen');
+    return true;
+  } else {
+    db.prepare('DELETE FROM bot_ips WHERE ip = ?').run(cleanIp);
+
+    const sessions = db.prepare('SELECT session_key, user_agent FROM listener_sessions WHERE ip = ?').all(cleanIp);
+    const updateStmt = db.prepare('UPDATE listener_sessions SET category = ?, player = ?, os = ? WHERE session_key = ?');
+    for (const s of sessions) {
+      const parsed = parseUserAgent(s.user_agent);
+      updateStmt.run(parsed.category, parsed.player, parsed.os, s.session_key);
+    }
+
+    insertEventStmt.run(now, 'bot_unflag', cleanIp, '', '', '', 0, 'Removed Bot / Ripper flag', '/listen');
+    return false;
+  }
+}
+
 function getIpHistory(ip) {
   const sessions = db
     .prepare('SELECT * FROM listener_sessions WHERE ip = ? ORDER BY last_seen DESC LIMIT 50')
@@ -622,10 +678,12 @@ function getIpHistory(ip) {
     `)
     .get(ip);
   const alias = getIpAlias(ip);
+  const isBot = isBotIp(ip);
   return {
     ip,
     friendlyName: alias?.friendlyName || '',
     notes: alias?.notes || '',
+    isBot,
     summary,
     sessions,
   };
@@ -648,5 +706,8 @@ module.exports = {
   getIpAliasesMap,
   getIpAlias,
   setIpAlias,
+  getBotIpsSet,
+  isBotIp,
+  setBotIp,
   logCustomEvent,
 };

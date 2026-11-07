@@ -15,6 +15,9 @@ const {
   getIpHistory,
   getIpAliasesMap,
   setIpAlias,
+  getBotIpsSet,
+  isBotIp,
+  setBotIp,
   logCustomEvent,
 } = require('./src/db');
 const { parseUserAgent, parseIcecastClientsPayload } = require('./src/parser');
@@ -107,10 +110,21 @@ function enrichListeners(rawListeners, mount = '/listen') {
   for (const item of rawListeners) {
     ipCounts.set(item.ip, (ipCounts.get(item.ip) || 0) + 1);
   }
+  const botIps = getBotIpsSet();
 
   return rawListeners
     .map((item, idx) => {
-      const ua = parseUserAgent(item.userAgent);
+      let ua = parseUserAgent(item.userAgent);
+      const isManualBot = botIps.has(item.ip);
+      const isBot = isManualBot || ua.isRipper || ua.category === 'Bot / Ripper';
+      if (isManualBot) {
+        ua = {
+          ...ua,
+          category: 'Bot / Ripper',
+          isRipper: true,
+          isManualBot: true,
+        };
+      }
       const geo = lookupIp(item.ip);
       return {
         clientId: String(item.clientId || `${item.ip}-${idx}`),
@@ -120,6 +134,8 @@ function enrichListeners(rawListeners, mount = '/listen') {
         mount: item.mount || mount,
         lag: item.lag || 0,
         connectionsFromIp: ipCounts.get(item.ip) || 1,
+        isBot,
+        isManualBot,
         ua,
         geo,
       };
@@ -477,6 +493,36 @@ app.post('/api/ip/:ip/alias', (req, res) => {
     const { friendlyName, notes } = req.body || {};
     const saved = setIpAlias(geo.ip, friendlyName, notes);
     res.json({ ok: true, alias: saved });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// API: Flag or unflag an IP as Bot / Ripper
+app.post('/api/ip/:ip/bot', (req, res) => {
+  try {
+    const geo = lookupIp(req.params.ip);
+    const { isBot, reason } = req.body || {};
+    const updatedStatus = setBotIp(geo.ip, Boolean(isBot), reason || '');
+
+    // Instantly update active listeners in latestState
+    const botIps = getBotIpsSet();
+    for (const l of latestState.listeners) {
+      if (l.ip === geo.ip) {
+        l.isBot = updatedStatus;
+        l.isManualBot = updatedStatus;
+        if (updatedStatus) {
+          l.ua.category = 'Bot / Ripper';
+          l.ua.isRipper = true;
+        } else {
+          const parsed = parseUserAgent(l.userAgent);
+          l.ua.category = parsed.category;
+          l.ua.isRipper = parsed.isRipper;
+        }
+      }
+    }
+
+    res.json({ ok: true, ip: geo.ip, isBot: updatedStatus });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }

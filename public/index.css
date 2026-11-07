@@ -313,6 +313,19 @@ button, input, select, textarea {
   color: #fff;
 }
 
+.btn-warning-ghost {
+  padding: 4px 8px;
+  font-size: 11.5px;
+  color: var(--accent-amber);
+  background: var(--accent-amber-soft);
+  border: 1px solid hsla(28, 95%, 56%, 0.35);
+}
+
+.btn-warning-ghost:hover {
+  background: var(--accent-amber);
+  color: hsl(214, 24%, 7%);
+}
+
 .select-control {
   padding: 6px 10px;
   border-radius: var(--radius-sm);

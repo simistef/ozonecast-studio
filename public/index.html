@@ -184,6 +184,63 @@
       </article>
     </section>
 
+    <!-- Connected Icecast Clients Table (/admin/listclients.xsl?mount=/listen) -->
+    <section class="panel" aria-label="Connected Icecast clients table">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>
+            <span>Connected Clients — Private Admin Console</span>
+            <span id="tableCountBadge" class="mount-tag">0 clients</span>
+          </h2>
+          <div class="panel-subtitle">
+            Live listener table for <span id="tableEndpointLabel" class="mono">https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen</span>
+          </div>
+        </div>
+
+        <div class="table-toolbar">
+          <div class="search-input-wrap">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="search" id="clientSearchInput" class="search-input" placeholder="Filter by IP, friendly name, city, country, player..." />
+          </div>
+
+          <select id="categoryFilterSelect" class="select-control" aria-label="Filter by client category">
+            <option value="ALL">All Client Types</option>
+            <option value="Web Browser">Web Browsers</option>
+            <option value="Desktop Player">Desktop Players</option>
+            <option value="Mobile / Native">Mobile / Native Apps</option>
+            <option value="Smart Speaker">Smart Speakers</option>
+            <option value="Bot / Ripper">Stream Rippers / Bots</option>
+          </select>
+
+          <button id="exportCsvBtn" class="btn" title="Export active listener table to CSV">Export CSV</button>
+          <button id="exportJsonBtn" class="btn" title="Export full telemetry snapshot to JSON">Export JSON</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="clients-table" id="clientsTable">
+          <thead>
+            <tr>
+              <th data-sort="ip">IP Address / Listener</th>
+              <th data-sort="location">Location (City / Country)</th>
+              <th data-sort="connectedSeconds">Connected Time ↓</th>
+              <th data-sort="player">Player / User-Agent</th>
+              <th data-sort="os">OS / Category</th>
+              <th>Admin Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clientsTableBody">
+            <tr>
+              <td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">Loading active Icecast listeners...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Row 1: Interactive World Geolocation Map + Country / City Breakdown -->
     <section class="row-split">
       <div class="panel">
@@ -354,62 +411,6 @@
       </div>
     </section>
 
-    <!-- Row 4: Full Private Admin Active Clients Table (/admin/listclients.xsl?mount=/listen) -->
-    <section class="panel" aria-label="Connected Icecast clients table">
-      <div class="panel-header">
-        <div class="panel-title-group">
-          <h2>
-            <span>Connected Clients — Private Admin Console</span>
-            <span id="tableCountBadge" class="mount-tag">0 clients</span>
-          </h2>
-          <div class="panel-subtitle">
-            Live listener table for <span id="tableEndpointLabel" class="mono">https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen</span>
-          </div>
-        </div>
-
-        <div class="table-toolbar">
-          <div class="search-input-wrap">
-            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input type="search" id="clientSearchInput" class="search-input" placeholder="Filter by IP, friendly name, city, country, player..." />
-          </div>
-
-          <select id="categoryFilterSelect" class="select-control" aria-label="Filter by client category">
-            <option value="ALL">All Client Types</option>
-            <option value="Web Browser">Web Browsers</option>
-            <option value="Desktop Player">Desktop Players</option>
-            <option value="Mobile / Native">Mobile / Native Apps</option>
-            <option value="Smart Speaker">Smart Speakers</option>
-            <option value="Bot / Ripper">Stream Rippers / Bots</option>
-          </select>
-
-          <button id="exportCsvBtn" class="btn" title="Export active listener table to CSV">Export CSV</button>
-          <button id="exportJsonBtn" class="btn" title="Export full telemetry snapshot to JSON">Export JSON</button>
-        </div>
-      </div>
-
-      <div class="table-scroll">
-        <table class="clients-table" id="clientsTable">
-          <thead>
-            <tr>
-              <th data-sort="ip">IP Address / Listener</th>
-              <th data-sort="location">Location (City / Country)</th>
-              <th data-sort="connectedSeconds">Connected Time ↓</th>
-              <th data-sort="player">Player / User-Agent</th>
-              <th data-sort="os">OS / Category</th>
-              <th>Admin Actions</th>
-            </tr>
-          </thead>
-          <tbody id="clientsTableBody">
-            <tr>
-              <td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">Loading active Icecast listeners...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
   </main>
 
   <!-- Modal 1: Icecast Server & Credentials Configuration -->
