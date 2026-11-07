@@ -159,6 +159,9 @@ try {
 try {
   db.exec('UPDATE snapshots SET human_count = listener_count, human_unique_ips = unique_ips WHERE human_count IS NULL;');
 } catch (_) {}
+try {
+  db.exec("ALTER TABLE listener_sessions ADD COLUMN last_track TEXT DEFAULT '';");
+} catch (_) {}
 
 const insertSnapshotStmt = db.prepare(`
   INSERT INTO snapshots (ts, mount, listener_count, unique_ips, peak_reported, current_track, bitrate, source_mode, human_count, human_unique_ips)
@@ -190,8 +193,8 @@ const upsertSessionStmt = db.prepare(`
   INSERT INTO listener_sessions (
     session_key, client_id, ip, mount, user_agent, player, category, os,
     country_code, country_name, city, lat, lon,
-    first_seen, last_seen, duration_seconds, is_active, source_mode
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+    first_seen, last_seen, duration_seconds, is_active, source_mode, last_track
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   ON CONFLICT(session_key) DO UPDATE SET
     client_id = excluded.client_id,
     user_agent = excluded.user_agent,
@@ -201,7 +204,8 @@ const upsertSessionStmt = db.prepare(`
     first_seen = MIN(listener_sessions.first_seen, excluded.first_seen),
     last_seen = excluded.last_seen,
     duration_seconds = MAX(listener_sessions.duration_seconds, excluded.duration_seconds),
-    is_active = 1
+    is_active = 1,
+    last_track = CASE WHEN excluded.last_track != '' THEN excluded.last_track ELSE listener_sessions.last_track END
 `);
 
 function recordPollResult({
@@ -275,7 +279,8 @@ function recordPollResult({
       firstSeen,
       now,
       client.connectedSeconds,
-      sourceMode
+      sourceMode,
+      currentTrack || ''
     );
 
     if (!prevMap.has(sessionKey) && prevActiveRows.length > 0) {
@@ -293,10 +298,17 @@ function recordPollResult({
     }
   }
 
-  const markInactiveStmt = db.prepare('UPDATE listener_sessions SET is_active = 0, last_seen = ? WHERE session_key = ?');
+  const markInactiveStmt = db.prepare(`
+    UPDATE listener_sessions
+    SET is_active = 0,
+        last_seen = ?,
+        last_track = CASE WHEN ? != '' THEN ? ELSE last_track END
+    WHERE session_key = ?
+  `);
   for (const [key, prev] of prevMap.entries()) {
     if (!currentKeys.has(key)) {
-      markInactiveStmt.run(now, key);
+      const exitTrack = currentTrack || lastTrack || '';
+      markInactiveStmt.run(now, exitTrack, exitTrack, key);
       insertEventStmt.run(
         now,
         'leave',
@@ -305,7 +317,7 @@ function recordPollResult({
         prev.city,
         prev.player,
         prev.duration_seconds,
-        `Disconnected after ${formatDurationShort(prev.duration_seconds)}`,
+        `Disconnected after ${formatDurationShort(prev.duration_seconds)}${exitTrack ? ` (Track: ${exitTrack})` : ''}`,
         mount
       );
     }
@@ -699,6 +711,24 @@ function getIpHistory(ip) {
   const sessions = db
     .prepare('SELECT * FROM listener_sessions WHERE ip = ? ORDER BY last_seen DESC LIMIT 50')
     .all(ip);
+
+  const findTrackStmt = db.prepare(`
+    SELECT current_track
+    FROM snapshots
+    WHERE ts <= ? AND LENGTH(current_track) > 0
+    ORDER BY ts DESC
+    LIMIT 1
+  `);
+
+  for (const s of sessions) {
+    if (!s.last_track) {
+      const snap = findTrackStmt.get(s.last_seen);
+      if (snap && snap.current_track) {
+        s.last_track = snap.current_track;
+      }
+    }
+  }
+
   const summary = db
     .prepare(`
       SELECT
@@ -713,12 +743,15 @@ function getIpHistory(ip) {
     .get(ip);
   const alias = getIpAlias(ip);
   const isBot = isBotIp(ip);
+  const lastExitTrack = sessions[0]?.last_track || '';
+
   return {
     ip,
     friendlyName: alias?.friendlyName || '',
     notes: alias?.notes || '',
     isBot,
     summary,
+    lastExitTrack,
     sessions,
   };
 }

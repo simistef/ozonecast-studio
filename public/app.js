@@ -1042,6 +1042,12 @@
       const sessions = history?.sessions || [];
       const currentName = friendlyName || history?.friendlyName || '';
       const isBot = Boolean(history?.isBot);
+      const isCurrentlyConnected = activeConnections.length > 0;
+      const currentStreamTrack = dashboardState?.stream?.title || '';
+      const exitTrack = history?.lastExitTrack || sessions[0]?.last_track || '';
+      const displayTrack = isCurrentlyConnected
+        ? (currentStreamTrack || exitTrack || 'Live Stream')
+        : (exitTrack || 'No track metadata recorded at disconnect');
 
       title.textContent = currentName ? `${currentName} (${ip})` : `Listener Dossier — ${ip}`;
 
@@ -1074,6 +1080,25 @@
           </button>
         </div>
 
+        <div style="background:var(--bg-elevated);padding:11px 14px;border-radius:8px;border:1px solid ${isCurrentlyConnected ? 'hsla(158,82%,54%,0.35)' : 'hsla(28,95%,54%,0.35)'};display:flex;align-items:center;gap:12px">
+          <div style="width:36px;height:36px;border-radius:6px;background:${isCurrentlyConnected ? 'hsla(158,82%,54%,0.15)' : 'hsla(28,95%,54%,0.15)'};border:1px solid ${isCurrentlyConnected ? 'hsla(158,82%,54%,0.4)' : 'hsla(28,95%,54%,0.4)'};display:flex;align-items:center;justify-content:center;color:${isCurrentlyConnected ? 'var(--accent-emerald)' : 'var(--accent-amber)'};font-size:16px;flex-shrink:0">
+            ${isCurrentlyConnected ? '📻' : '🎵'}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.04em">
+              ${isCurrentlyConnected ? 'NOW PLAYING (LISTENER CURRENTLY CONNECTED)' : 'TRACK PLAYED WHEN LISTENER LEFT'}
+            </div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--text-primary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(displayTrack)}">
+              ${escapeHtml(displayTrack)}
+            </div>
+          </div>
+          ${
+            isCurrentlyConnected
+              ? '<span class="status-badge live" style="padding:2px 8px;font-size:11px">Live Now</span>'
+              : ''
+          }
+        </div>
+
         <div class="form-grid-2" style="background:var(--bg-canvas);padding:12px 14px;border-radius:8px;border:1px solid var(--border-subtle)">
           <div>
             <div style="font-size:11px;color:var(--text-muted)">LOCATION</div>
@@ -1089,25 +1114,38 @@
           </div>
         </div>
 
-        <div style="font-size:12.5px;font-weight:600;margin-top:4px">Recent Sessions from ${escapeHtml(ip)}</div>
-        <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto">
+        <div style="font-size:12.5px;font-weight:600;margin-top:4px">Recorded Sessions &amp; Disconnect Tracks</div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto">
           ${
             sessions.length === 0
               ? `<div style="color:var(--text-muted);font-size:12px">No stored sessions yet.</div>`
               : sessions
                   .map(
-                    s => `
-                  <div class="event-row">
-                    <div>
-                      <div style="font-weight:500">${escapeHtml(s.player)} <span style="color:var(--text-muted)">(${escapeHtml(s.os)})</span></div>
-                      <div class="mono" style="font-size:11px;color:var(--text-muted)">${escapeHtml(s.user_agent.slice(0, 68))}</div>
+                    s => {
+                      const trackText = s.last_track || 'No track metadata recorded';
+                      const trackLabel = s.is_active ? 'Listening to:' : 'Left during:';
+                      return `
+                  <div class="event-row" style="padding:9px 12px;border-radius:6px;background:var(--bg-canvas);border:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:12px">
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <span style="font-weight:600">${escapeHtml(s.player)}</span>
+                        <span style="font-size:11.5px;color:var(--text-muted)">(${escapeHtml(s.os)})</span>
+                        ${s.is_active ? '<span class="status-badge live" style="padding:1px 6px;font-size:10px">Active</span>' : ''}
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(trackText)}">
+                        <span style="color:var(--accent-amber);font-size:12px">🎵</span>
+                        <span style="font-size:11px;font-weight:600;color:var(--accent-amber)">${trackLabel}</span>
+                        <span style="color:var(--text-primary);font-weight:500;overflow:hidden;text-overflow:ellipsis">${escapeHtml(trackText)}</span>
+                      </div>
+                      <div class="mono" style="font-size:10.5px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(s.user_agent)}">${escapeHtml(s.user_agent)}</div>
                     </div>
-                    <div style="text-align:right" class="mono">
-                      <div style="color:var(--accent-amber);font-weight:600">${formatDurationHuman(s.duration_seconds)}</div>
-                      <div style="font-size:10.5px;color:var(--text-muted)">${new Date(s.last_seen).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                    <div style="text-align:right;flex-shrink:0" class="mono">
+                      <div style="color:var(--accent-emerald);font-weight:600">${formatDurationHuman(s.duration_seconds)}</div>
+                      <div style="font-size:10.5px;color:var(--text-muted);margin-top:2px">${new Date(s.last_seen).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
-                `
+                `;
+                    }
                   )
                   .join('')
           }
