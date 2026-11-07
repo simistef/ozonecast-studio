@@ -213,63 +213,118 @@
       const ctx = canvas.getContext('2d');
       const rect = canvas.parentElement.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      const w = Math.max(240, Math.floor(rect.width || canvas.parentElement.clientWidth || 600));
+      const h = Math.max(140, Math.floor(rect.height || 185));
+
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
       ctx.scale(dpr, dpr);
 
-      const w = rect.width;
-      const h = rect.height;
       ctx.clearRect(0, 0, w, h);
 
       const hourly = timeOfDay.hourly || [];
-      const padL = 32;
-      const padR = 10;
-      const padT = 14;
-      const padB = 24;
+      const padL = 36;
+      const padR = 14;
+      const padT = 16;
+      const padB = 26;
       const pw = w - padL - padR;
       const ph = h - padT - padB;
 
-      const maxVal = Math.max(10, ...hourly.map(x => Math.max(x.avgListeners || 0, x.peakListeners || 0))) * 1.15;
+      const peakObserved = Math.max(0, ...hourly.map(x => Math.max(x.avgListeners || 0, x.peakListeners || 0)));
+      const maxVal = Math.max(5, Math.ceil(peakObserved * 1.2));
       const currentHour = new Date().getHours();
 
-      ctx.strokeStyle = 'hsla(210, 20%, 90%, 0.06)';
-      ctx.fillStyle = 'hsl(214, 12%, 48%)';
+      // Reference horizontal gridlines
+      const steps = 3;
+      ctx.strokeStyle = 'hsla(210, 20%, 90%, 0.08)';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = 'hsl(214, 12%, 52%)';
       ctx.font = '10.5px "JetBrains Mono", monospace';
       ctx.textAlign = 'right';
 
-      for (let i = 0; i <= 3; i++) {
-        const y = padT + (ph / 3) * i;
-        const val = Math.round(maxVal * (1 - i / 3));
+      for (let i = 0; i <= steps; i++) {
+        const y = padT + (ph / steps) * i;
+        const val = Math.round(maxVal * (1 - i / steps));
         ctx.beginPath();
         ctx.moveTo(padL, y);
         ctx.lineTo(w - padR, y);
         ctx.stroke();
-        ctx.fillText(String(val), padL - 6, y + 3);
+        ctx.fillText(String(val), padL - 8, y + 3.5);
       }
 
       const slotW = pw / 24;
-      const barW = Math.max(4, slotW * 0.64);
+      const barW = Math.max(5, Math.min(24, slotW * 0.72));
 
       hourly.forEach((b, idx) => {
         const xCenter = padL + idx * slotW + slotW / 2;
-        const barH = Math.max(3, (b.avgListeners / maxVal) * ph);
-        const yTop = padT + ph - barH;
+        const xLeft = xCenter - barW / 2;
+        const avg = Number(b.avgListeners) || 0;
+        const peak = Number(b.peakListeners) || 0;
+        const isCurrent = idx === currentHour;
+        const isPeakHour = avg === timeOfDay.bestHourAvg && avg > 0;
 
-        ctx.fillStyle =
-          idx === currentHour
-            ? 'hsl(152, 76%, 46%)'
-            : b.avgListeners === timeOfDay.bestHourAvg && b.avgListeners > 0
-            ? 'hsl(28, 95%, 56%)'
-            : 'hsla(28, 95%, 56%, 0.55)';
+        // Background slot track so every hour slot is clearly visible
+        ctx.fillStyle = isCurrent ? 'hsla(152, 76%, 46%, 0.12)' : 'hsla(210, 20%, 90%, 0.035)';
+        ctx.fillRect(xLeft, padT, barW, ph);
 
-        ctx.beginPath();
-        ctx.roundRect(xCenter - barW / 2, yTop, barW, barH, 3);
-        ctx.fill();
+        // Peak surge line if peak > avg
+        if (peak > avg && peak > 0) {
+          const peakH = Math.min(ph, (peak / maxVal) * ph);
+          const yPeak = padT + ph - peakH;
+          ctx.strokeStyle = 'hsla(28, 95%, 56%, 0.5)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(xLeft, yPeak);
+          ctx.lineTo(xLeft + barW, yPeak);
+          ctx.stroke();
+        }
 
-        if (idx % 3 === 0) {
-          ctx.fillStyle = 'hsl(214, 12%, 48%)';
+        // Active average listener bar
+        if (avg > 0) {
+          const barH = Math.max(4, Math.min(ph, (avg / maxVal) * ph));
+          const yTop = padT + ph - barH;
+
+          const grad = ctx.createLinearGradient(0, yTop, 0, padT + ph);
+          if (isCurrent) {
+            grad.addColorStop(0, 'hsl(152, 76%, 52%)');
+            grad.addColorStop(1, 'hsl(152, 76%, 36%)');
+          } else if (isPeakHour) {
+            grad.addColorStop(0, 'hsl(28, 95%, 58%)');
+            grad.addColorStop(1, 'hsl(18, 92%, 46%)');
+          } else {
+            grad.addColorStop(0, 'hsl(28, 95%, 54%)');
+            grad.addColorStop(1, 'hsla(28, 95%, 44%, 0.75)');
+          }
+
+          ctx.fillStyle = grad;
+          if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(xLeft, yTop, barW, barH, [3, 3, 0, 0]);
+            ctx.fill();
+          } else {
+            ctx.fillRect(xLeft, yTop, barW, barH);
+          }
+
+          if (avg >= 2 && barH >= 16) {
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9.5px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(avg), xCenter, yTop - 3);
+          }
+        } else {
+          // Subtle baseline tick for monitored hours with 0 listeners
+          ctx.fillStyle = isCurrent ? 'hsl(152, 76%, 46%)' : 'hsla(210, 20%, 90%, 0.16)';
+          ctx.fillRect(xLeft, padT + ph - 2, barW, 2);
+        }
+
+        // X-axis Hour Labels (every 3 hours: 00h, 03h, 06h, 09h, 12h, 15h, 18h, 21h, 23h)
+        if (idx % 3 === 0 || idx === 23) {
+          ctx.fillStyle = isCurrent ? 'hsl(152, 76%, 50%)' : 'hsl(214, 12%, 48%)';
+          ctx.font = isCurrent ? 'bold 10px "JetBrains Mono", monospace' : '9.5px "JetBrains Mono", monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(`${String(idx).padStart(2, '0')}h`, xCenter, h - 6);
+          ctx.fillText(`${String(idx).padStart(2, '0')}h`, xCenter, h - 7);
         }
       });
     }
@@ -1351,7 +1406,10 @@
     document.getElementById('closeIpModalFooterBtn')?.addEventListener('click', () => ipBackdrop.classList.add('hidden'));
 
     window.addEventListener('resize', () => {
-      if (dashboardState) renderHistoryChart(dashboardState.history);
+      if (dashboardState) {
+        renderHistoryChart(dashboardState.history);
+        renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, dashboardState.kpis);
+      }
     });
   }
 
