@@ -1438,18 +1438,33 @@
     if (!backdrop || !content) return;
 
     title.textContent = `Listener Dossier — ${ip}`;
-    content.innerHTML = `<div style="color:var(--text-secondary)">Querying SQLite session history and MaxMind GeoIP for ${escapeHtml(ip)}...</div>`;
+    content.innerHTML = `
+      <div style="padding:28px 16px;text-align:center;color:var(--text-secondary)">
+        <div style="margin:0 auto 12px;width:24px;height:24px;border:2.5px solid var(--border-subtle);border-top-color:var(--accent-amber);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+        <div style="font-size:13px">Loading session history and telemetry for <span class="mono" style="color:var(--text-primary);font-weight:600">${escapeHtml(ip)}</span>...</div>
+      </div>
+    `;
     backdrop.classList.remove('hidden');
 
     try {
-      const res = await fetch(`/api/ip/${encodeURIComponent(ip)}`);
+      const abortCtrl = new AbortController();
+      const timer = setTimeout(() => abortCtrl.abort(), 4500);
+      const res = await fetch(`/api/ip/${encodeURIComponent(ip)}`, { signal: abortCtrl.signal });
+      clearTimeout(timer);
+
       const data = await res.json();
-      if (!data.ok) {
-        content.innerHTML = `<div style="color:var(--accent-crimson)">Failed to load IP dossier.</div>`;
+      if (!data || !data.ok) {
+        content.innerHTML = `
+          <div style="padding:16px;background:var(--bg-elevated);border-radius:8px;border:1px solid hsla(355,84%,60%,0.3)">
+            <div style="color:var(--accent-crimson);font-weight:600">Failed to load dossier for ${escapeHtml(ip)}.</div>
+            <button type="button" class="btn btn-primary" style="margin-top:12px" id="retryLoadDossierBtn">Retry</button>
+          </div>
+        `;
+        document.getElementById('retryLoadDossierBtn')?.addEventListener('click', () => openIpInspector(ip));
         return;
       }
 
-      const { geo, activeConnections, history, friendlyName, currentTrack: liveTrack, currentTrackProgressSec: liveTrackProgressSec } = data;
+      const { geo = {}, activeConnections = [], history = {}, friendlyName, currentTrack: liveTrack, currentTrackProgressSec: liveTrackProgressSec } = data;
       const sum = history?.summary || {};
       const sessions = history?.sessions || [];
       const currentName = friendlyName || history?.friendlyName || '';
@@ -1634,7 +1649,17 @@
         openIpInspector(ip);
       });
     } catch (err) {
-      content.innerHTML = `<div style="color:var(--accent-crimson)">Error: ${escapeHtml(err.message)}</div>`;
+      const isTimeout = err.name === 'AbortError' || err.message.includes('abort');
+      const msg = isTimeout
+        ? 'Dossier query timed out. The server or network is slow to respond.'
+        : escapeHtml(err.message);
+      content.innerHTML = `
+        <div style="padding:16px;background:var(--bg-elevated);border-radius:8px;border:1px solid hsla(355,84%,60%,0.3)">
+          <div style="color:var(--accent-crimson);font-weight:600">Error loading dossier: ${msg}</div>
+          <button type="button" class="btn btn-primary" style="margin-top:12px" id="retryCatchDossierBtn">Retry</button>
+        </div>
+      `;
+      document.getElementById('retryCatchDossierBtn')?.addEventListener('click', () => openIpInspector(ip));
     }
   }
 

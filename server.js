@@ -540,25 +540,41 @@ app.post('/api/poll', async (req, res) => {
 
 // API: IP session history & geolocation lookup
 app.get('/api/ip/:ip', async (req, res) => {
-  const ip = req.params.ip;
-  const geo = await resolveIpHighAccuracy(ip);
-  const history = getIpHistory(geo.ip);
-  const activeMatches = latestState.listeners.filter(l => l.ip === geo.ip);
-  const currentTrackProgressSec = latestState.sourceMeta?.title
-    ? Math.max(0, Math.floor((Date.now() - trackStartTs) / 1000))
-    : 0;
+  try {
+    const rawIp = req.params.ip;
+    const geo = await resolveIpHighAccuracy(rawIp, 1500);
+    const history = getIpHistory(geo.ip);
+    const activeMatches = (latestState.listeners || []).filter(l => l.ip === geo.ip);
+    const currentTrackProgressSec = latestState.sourceMeta?.title
+      ? Math.max(0, Math.floor((Date.now() - trackStartTs) / 1000))
+      : 0;
 
-  res.json({
-    ok: true,
-    ip: geo.ip,
-    friendlyName: history.friendlyName || '',
-    notes: history.notes || '',
-    geo,
-    activeConnections: activeMatches,
-    currentTrack: latestState.sourceMeta?.title || '',
-    currentTrackProgressSec,
-    history,
-  });
+    res.json({
+      ok: true,
+      ip: geo.ip,
+      friendlyName: history?.friendlyName || '',
+      notes: history?.notes || '',
+      geo,
+      activeConnections: activeMatches,
+      currentTrack: latestState.sourceMeta?.title || '',
+      currentTrackProgressSec,
+      history: history || { summary: {}, sessions: [] },
+    });
+  } catch (err) {
+    console.error('Error in /api/ip/:ip handler:', err.message);
+    const fallbackGeo = lookupIp(req.params.ip);
+    res.json({
+      ok: true,
+      ip: fallbackGeo.ip,
+      friendlyName: '',
+      notes: '',
+      geo: fallbackGeo,
+      activeConnections: [],
+      currentTrack: latestState.sourceMeta?.title || '',
+      currentTrackProgressSec: 0,
+      history: { summary: {}, sessions: [] },
+    });
+  }
 });
 
 // API: Save or clear friendly name / alias for an IP address

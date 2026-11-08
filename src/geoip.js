@@ -1,5 +1,3 @@
-const http = require('node:http');
-const https = require('node:https');
 const geoip = require('geoip-lite');
 const { getCachedGeoIp, setCachedGeoIp } = require('./db');
 
@@ -78,88 +76,78 @@ function isPrivateIp(ip) {
  * Fetch high-accuracy geolocation from online API
  * Prioritizes ipinfo.io if IPINFO_TOKEN is provided, otherwise uses ip-api.com
  */
-function fetchRemoteGeo(ip) {
-  return new Promise((resolve, reject) => {
-    const ipinfoToken = process.env.IPINFO_TOKEN;
-    if (ipinfoToken) {
-      const url = `https://ipinfo.io/${encodeURIComponent(ip)}/json?token=${encodeURIComponent(ipinfoToken)}`;
-      const req = https.get(url, { timeout: 4500 }, res => {
-        let raw = '';
-        res.on('data', chunk => (raw += chunk));
-        res.on('end', () => {
-          try {
-            if (res.statusCode !== 200) {
-              return reject(new Error(`IPinfo HTTP ${res.statusCode}: ${raw}`));
-            }
-            const data = JSON.parse(raw);
-            const [latStr, lonStr] = (data.loc || '').split(',');
-            const countryCode = data.country || 'UN';
-            const countryName = COUNTRY_NAMES[countryCode] || data.country || countryCode;
-            const city = (data.city || '').trim();
-
-            resolve({
-              ip,
-              countryCode,
-              countryName,
-              region: data.region || '',
-              city,
-              hasCity: Boolean(city),
-              lat: Number(latStr) || 0,
-              lon: Number(lonStr) || 0,
-              timezone: data.timezone || 'UTC',
-              isp: data.org || '',
-              asOrg: data.org || '',
-              source: 'ipinfo.io (High Accuracy)',
-              isLocal: false,
-            });
-          } catch (err) {
-            reject(err);
-          }
-        });
-      });
-      req.on('error', reject);
-      req.on('timeout', () => req.destroy(new Error('IPinfo lookup timeout')));
-      return;
-    }
-
-    // Default to ip-api.com (No token needed, highly accurate in Europe/worldwide)
-    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`;
-    const req = http.get(url, { timeout: 4500 }, res => {
-      let raw = '';
-      res.on('data', chunk => (raw += chunk));
-      res.on('end', () => {
-        try {
-          const data = JSON.parse(raw);
-          if (data.status !== 'success') {
-            return reject(new Error(`ip-api returned: ${data.message || 'failure'}`));
-          }
-          const countryCode = data.countryCode || 'UN';
-          const countryName = data.country || COUNTRY_NAMES[countryCode] || countryCode;
-          const city = (data.city || '').trim();
-
-          resolve({
-            ip,
-            countryCode,
-            countryName,
-            region: data.regionName || data.region || '',
-            city,
-            hasCity: Boolean(city),
-            lat: Number(data.lat) || 0,
-            lon: Number(data.lon) || 0,
-            timezone: data.timezone || 'UTC',
-            isp: data.isp || data.org || '',
-            asOrg: data.as || data.org || '',
-            source: 'ip-api.com (High Accuracy)',
-            isLocal: false,
-          });
-        } catch (err) {
-          reject(err);
-        }
-      });
+async function fetchRemoteGeo(ip) {
+  const ipinfoToken = process.env.IPINFO_TOKEN;
+  if (ipinfoToken) {
+    const url = `https://ipinfo.io/${encodeURIComponent(ip)}/json?token=${encodeURIComponent(ipinfoToken)}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(3500),
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'OzoneCast-Studio/1.0 (+https://live.ozone.fm)',
+      },
     });
-    req.on('error', reject);
-    req.on('timeout', () => req.destroy(new Error('ip-api lookup timeout')));
+    if (!res.ok) {
+      throw new Error(`IPinfo HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const [latStr, lonStr] = (data.loc || '').split(',');
+    const countryCode = data.country || 'UN';
+    const countryName = COUNTRY_NAMES[countryCode] || data.country || countryCode;
+    const city = (data.city || '').trim();
+
+    return {
+      ip,
+      countryCode,
+      countryName,
+      region: data.region || '',
+      city,
+      hasCity: Boolean(city),
+      lat: Number(latStr) || 0,
+      lon: Number(lonStr) || 0,
+      timezone: data.timezone || 'UTC',
+      isp: data.org || '',
+      asOrg: data.org || '',
+      source: 'ipinfo.io (High Accuracy)',
+      isLocal: false,
+    };
+  }
+
+  // Default to ip-api.com (No token needed, highly accurate in Europe/worldwide)
+  const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`;
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(2500),
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'OzoneCast-Studio/1.0 (+https://live.ozone.fm)',
+    },
   });
+  if (!res.ok) {
+    throw new Error(`ip-api HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if (data.status !== 'success') {
+    throw new Error(`ip-api error: ${data.message || 'failure'}`);
+  }
+  const countryCode = data.countryCode || 'UN';
+  const countryName = data.country || COUNTRY_NAMES[countryCode] || countryCode;
+  const city = (data.city || '').trim();
+
+  return {
+    ip,
+    countryCode,
+    countryName,
+    region: data.regionName || data.region || '',
+    city,
+    hasCity: Boolean(city),
+    lat: Number(data.lat) || 0,
+    lon: Number(data.lon) || 0,
+    timezone: data.timezone || 'UTC',
+    isp: data.isp || data.org || '',
+    asOrg: data.as || data.org || '',
+    source: 'ip-api.com (High Accuracy)',
+    isLocal: false,
+  };
 }
 
 function processQueue() {
@@ -178,8 +166,8 @@ function processQueue() {
     .finally(() => {
       inQueueOrFlight.delete(ip);
       isQueueRunning = false;
-      // Rate limiter delay: 1400ms for ip-api (under 45/min threshold), 200ms for ipinfo token
-      const delay = process.env.IPINFO_TOKEN ? 200 : 1400;
+      // Rate limiter delay: 1500ms for ip-api (under 45/min threshold), 200ms for ipinfo token
+      const delay = process.env.IPINFO_TOKEN ? 200 : 1500;
       setTimeout(processQueue, delay);
     });
 }
@@ -312,9 +300,10 @@ function lookupIp(rawIp) {
 /**
  * Direct async resolution for on-demand requests (e.g. IP dossier modal).
  * If already cached with high accuracy, returns immediately.
- * Otherwise resolves directly from high-accuracy provider and saves to SQLite.
+ * Otherwise attempts high-accuracy provider with a strict 1500ms cap,
+ * and immediately falls back to local geoip-lite if the remote API takes too long or fails.
  */
-async function resolveIpHighAccuracy(rawIp) {
+async function resolveIpHighAccuracy(rawIp, maxWaitMs = 1500) {
   const ip = cleanIp(rawIp);
   if (!ip || isPrivateIp(ip)) return lookupIp(rawIp);
 
@@ -324,13 +313,22 @@ async function resolveIpHighAccuracy(rawIp) {
     return cached;
   }
 
+  const fallback = lookupIp(rawIp);
+
   try {
-    const result = await fetchRemoteGeo(ip);
+    const fetchPromise = fetchRemoteGeo(ip);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Geo resolution timeout')), maxWaitMs)
+    );
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
     geoCache.set(ip, result);
     setCachedGeoIp(result);
     return result;
   } catch (_err) {
-    return lookupIp(rawIp);
+    // If online lookup fails or exceeds maxWaitMs, return local offline fallback
+    // and queue for background retry so user UI is NEVER blocked
+    enqueueHighAccuracy(ip);
+    return fallback;
   }
 }
 
