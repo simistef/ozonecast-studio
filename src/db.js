@@ -762,8 +762,7 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
  */
 function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, excludeBots = false) {
   const since = rangeMinutes > 0 ? Date.now() - rangeMinutes * 60 * 1000 : 0;
-  const cfg = getConfig();
-  const excludeFlag = excludeBots || cfg.returningExcludeBots !== false ? 1 : 0;
+  const excludeFlag = excludeBots ? 1 : 0;
 
   const query = `
     SELECT
@@ -785,10 +784,29 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
         category != 'Bot / Ripper'
         AND ip NOT IN (SELECT ip FROM bot_ips)
         AND LOWER(user_agent) NOT LIKE '%bot%'
-        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
         AND LOWER(user_agent) NOT LIKE '%crawler%'
         AND LOWER(user_agent) NOT LIKE '%spider%'
         AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(user_agent) NOT LIKE '%uptime%'
+        AND LOWER(user_agent) NOT LIKE '%robot%'
+        AND LOWER(user_agent) NOT LIKE '%pingdom%'
+        AND LOWER(user_agent) NOT LIKE '%statuscake%'
+        AND LOWER(user_agent) NOT LIKE '%zabbix%'
+        AND LOWER(user_agent) NOT LIKE '%prometheus%'
+        AND LOWER(user_agent) NOT LIKE '%nagios%'
+        AND LOWER(user_agent) NOT LIKE '%probe%'
+        AND LOWER(user_agent) NOT LIKE '%monitor%'
+        AND LOWER(user_agent) NOT LIKE '%radio-browser%'
+        AND LOWER(user_agent) NOT LIKE '%streamcheck%'
+        AND LOWER(user_agent) NOT LIKE '%curl%'
+        AND LOWER(user_agent) NOT LIKE '%python%'
+        AND LOWER(user_agent) NOT LIKE '%go-http%'
+        AND LOWER(user_agent) NOT LIKE '%okhttp%'
+        AND LOWER(user_agent) NOT LIKE '%aiohttp%'
+        AND LOWER(user_agent) NOT LIKE '%node-fetch%'
+        AND LOWER(user_agent) NOT LIKE '%axios%'
+        AND duration_seconds >= 15
       ))
   `;
 
@@ -837,11 +855,13 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
         countryName: cName,
         count: 0,
         totalDurationSec: 0,
+        uniqueIps: new Set(),
       });
     }
     const cEntry = countryMap.get(cc);
     cEntry.count++;
     cEntry.totalDurationSec += sec;
+    cEntry.uniqueIps.add(r.ip);
 
     // City aggregation
     const rawCity = (r.city || '').trim();
@@ -856,11 +876,13 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
         countryName: cName,
         count: 0,
         totalDurationSec: 0,
+        uniqueIps: new Set(),
       });
     }
     const cityEntry = cityMap.get(cityKey);
     cityEntry.count++;
     cityEntry.totalDurationSec += sec;
+    cityEntry.uniqueIps.add(r.ip);
 
     // Player, Category, OS
     const pName = r.player || 'Other';
@@ -902,7 +924,11 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
 
   const countries = Array.from(countryMap.values())
     .map(c => ({
-      ...c,
+      countryCode: c.countryCode,
+      countryName: c.countryName,
+      count: c.count,
+      totalDurationSec: c.totalDurationSec,
+      uniqueIps: c.uniqueIps ? c.uniqueIps.size : 1,
       sharePct: Number(((c.count / total) * 100).toFixed(1)),
       avgDurationSec: Math.round(c.totalDurationSec / c.count),
     }))
@@ -910,7 +936,13 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
 
   const cities = Array.from(cityMap.values())
     .map(c => ({
-      ...c,
+      city: c.city,
+      hasCity: c.hasCity,
+      countryCode: c.countryCode,
+      countryName: c.countryName,
+      count: c.count,
+      totalDurationSec: c.totalDurationSec,
+      uniqueIps: c.uniqueIps ? c.uniqueIps.size : 1,
       sharePct: Number(((c.count / total) * 100).toFixed(1)),
       avgDurationSec: Math.round(c.totalDurationSec / c.count),
     }))

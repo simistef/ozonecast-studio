@@ -98,11 +98,35 @@ function parseUserAgent(uaRaw) {
     os = 'Hardware / Embedded';
   }
 
-  // Bots, crawlers, and stream monitors first (before generic Mozilla/Chrome checks)
+  // Bots, crawlers, uptime monitors, and stream monitors first (before generic Mozilla/Chrome checks)
   if (lower.includes('hisbot') || lower.includes('onlineradiobox')) {
     player = 'OnlineRadioBox (ORB Bot)';
     category = 'Bot / Ripper';
     if (os === 'Unknown') os = 'Linux';
+    isRipper = true;
+  } else if (
+    lower.includes('uptimerobot') ||
+    lower.includes('pingdom') ||
+    lower.includes('statuscake') ||
+    lower.includes('zabbix') ||
+    lower.includes('prometheus') ||
+    lower.includes('nagios') ||
+    lower.includes('site24x7') ||
+    lower.includes('nodeping') ||
+    lower.includes('freshping') ||
+    lower.includes('betteruptime') ||
+    lower.includes('hetrixtools') ||
+    lower.includes('healthcheck')
+  ) {
+    const probeMatch = ua.match(/([A-Za-z0-9_-]*(?:Uptime|Pingdom|StatusCake|Monitor|Probe|Check)[A-Za-z0-9_-]*)/i);
+    player = probeMatch ? `${probeMatch[1]} Monitor` : 'Uptime Health Monitor';
+    category = 'Bot / Ripper';
+    os = 'Monitor / Probe';
+    isRipper = true;
+  } else if (lower.includes('radio-browser') || lower.includes('streamcheck') || lower.includes('icecastcheck') || lower.includes('vtuner')) {
+    player = 'Directory Indexer / Stream Check';
+    category = 'Bot / Ripper';
+    os = 'Aggregator Bot';
     isRipper = true;
   } else if (
     lower.includes('claudebot') ||
@@ -113,10 +137,17 @@ function parseUserAgent(uaRaw) {
     lower.includes('ahrefsbot') ||
     lower.includes('semrushbot') ||
     lower.includes('mj12bot') ||
-    lower.includes('petalsearch')
+    lower.includes('petalsearch') ||
+    lower.includes('applebot') ||
+    lower.includes('bytespider') ||
+    lower.includes('duckduckbot') ||
+    lower.includes('crawler') ||
+    lower.includes('spider') ||
+    lower.includes('scraper') ||
+    /\b(bot|crawler|spider)\b/i.test(ua)
   ) {
-    const botMatch = ua.match(/([A-Za-z0-9_-]*Bot)\/[\d.]+/i);
-    player = botMatch ? `${botMatch[1]} Crawler` : 'Web Crawler Bot';
+    const botMatch = ua.match(/([A-Za-z0-9_-]*(?:Bot|Spider|Crawler))\b/i);
+    player = botMatch ? `${botMatch[1]}` : 'Web Crawler Bot';
     category = 'Bot / Ripper';
     os = 'Crawler / Bot';
     isRipper = true;
@@ -124,9 +155,18 @@ function parseUserAgent(uaRaw) {
     lower.includes('streamripper') ||
     (lower.includes('icy-metadata') && lower.includes('wget')) ||
     lower.includes('curl/') ||
+    lower.includes('wget') ||
     lower.includes('python-urllib') ||
     lower.includes('python-requests') ||
-    lower.includes('go-http-client')
+    lower.includes('go-http-client') ||
+    lower.includes('okhttp') ||
+    lower.includes('aiohttp') ||
+    lower.includes('node-fetch') ||
+    lower.includes('axios') ||
+    lower.includes('got/') ||
+    lower.includes('needle/') ||
+    lower.includes('libwww-perl') ||
+    lower.includes('httpclient')
   ) {
     player = ua.split('/')[0] || 'Stream Ripper / CLI';
     category = 'Bot / Ripper';

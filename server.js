@@ -205,11 +205,13 @@ function computeBreakdowns(listeners) {
         totalDurationSec: 0,
         lat: l.geo.lat,
         lon: l.geo.lon,
+        uniqueIps: new Set(),
       });
     }
     const cEntry = countryMap.get(cc);
     cEntry.count++;
     cEntry.totalDurationSec += sec;
+    cEntry.uniqueIps.add(l.ip);
 
     // City aggregation
     const cName = l.geo.countryName || cc;
@@ -227,11 +229,13 @@ function computeBreakdowns(listeners) {
         lon: l.geo.lon,
         count: 0,
         totalDurationSec: 0,
+        uniqueIps: new Set(),
       });
     }
     const cityEntry = cityMap.get(cityKey);
     cityEntry.count++;
     cityEntry.totalDurationSec += sec;
+    cityEntry.uniqueIps.add(l.ip);
 
     // Player aggregation
     const pName = l.ua.player;
@@ -248,7 +252,13 @@ function computeBreakdowns(listeners) {
 
   const countries = Array.from(countryMap.values())
     .map(c => ({
-      ...c,
+      countryCode: c.countryCode,
+      countryName: c.countryName,
+      count: c.count,
+      totalDurationSec: c.totalDurationSec,
+      lat: c.lat,
+      lon: c.lon,
+      uniqueIps: c.uniqueIps ? c.uniqueIps.size : 1,
       sharePct: Number(((c.count / total) * 100).toFixed(1)),
       avgDurationSec: Math.round(c.totalDurationSec / c.count),
     }))
@@ -256,7 +266,15 @@ function computeBreakdowns(listeners) {
 
   const cities = Array.from(cityMap.values())
     .map(c => ({
-      ...c,
+      city: c.city,
+      hasCity: c.hasCity,
+      countryCode: c.countryCode,
+      countryName: c.countryName,
+      lat: c.lat,
+      lon: c.lon,
+      count: c.count,
+      totalDurationSec: c.totalDurationSec,
+      uniqueIps: c.uniqueIps ? c.uniqueIps.size : 1,
       sharePct: Number(((c.count / total) * 100).toFixed(1)),
       avgDurationSec: Math.round(c.totalDurationSec / c.count),
     }))

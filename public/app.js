@@ -153,7 +153,7 @@
         label: 'Past 24 Hours (SQLite)',
         badgeClass: 'time-bound-badge time-24h',
         badgeText: 'Past 24h',
-        geoSub: 'Listener share & total session time by location (Last 24 hours in SQLite)',
+        geoSub: 'Listener share & average session time by location (Unique listeners & connection sessions over 24h)',
         mapSub: 'MaxMind GeoIP locations for unique listener sessions over the past 24 hours',
         retentionText: '24h Sessions',
         techSub: 'All sessions over past 24 hours',
@@ -162,7 +162,7 @@
         label: 'Past 7 Days (SQLite)',
         badgeClass: 'time-bound-badge time-7d',
         badgeText: 'Past 7d',
-        geoSub: 'Listener share & total session time by location (Last 7 days in SQLite)',
+        geoSub: 'Listener share & average session time by location (Unique listeners & connection sessions over 7d)',
         mapSub: 'MaxMind GeoIP locations for unique listener sessions over the past 7 days',
         retentionText: '7d Sessions',
         techSub: 'All sessions over past 7 days',
@@ -171,7 +171,7 @@
         label: 'All-Time Station History',
         badgeClass: 'time-bound-badge alltime',
         badgeText: 'All-Time',
-        geoSub: 'Lifetime listener share & total session time by location (All-Time in SQLite)',
+        geoSub: 'Lifetime listener share & average session time by location (Unique listeners & connection sessions All-Time)',
         mapSub: 'MaxMind GeoIP locations across all recorded station history in SQLite',
         retentionText: 'All-Time Sessions',
         techSub: 'All recorded station history',
@@ -916,13 +916,17 @@
             label = `${renderCountryFlag(item.countryCode, item.countryName, 18)}<span style="color:var(--text-secondary);font-style:italic" title="Specific city not resolved by GeoIP">${escapeHtml(item.city)}</span>`;
           }
         }
+        const hasDivergentConns = item.uniqueIps && item.uniqueIps !== item.count;
+        const countDisplay = hasDivergentConns
+          ? `${item.uniqueIps} unique (${item.count} conns)`
+          : `${item.count}`;
         return `
           <div class="dist-item">
             <div class="dist-item-header">
               <div class="dist-label">${label}</div>
               <div class="dist-metrics">
                 <span>avg ${formatDurationHuman(item.avgDurationSec)}</span>
-                <strong style="color:var(--text-primary)">${item.count} (${item.sharePct}%)</strong>
+                <strong style="color:var(--text-primary)">${countDisplay} • ${item.sharePct}%</strong>
               </div>
             </div>
             <div class="dist-bar-track">
