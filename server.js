@@ -21,6 +21,8 @@ const {
   isBotIp,
   setBotIp,
   logCustomEvent,
+  getDetractorSongs,
+  getDetractorSummary,
 } = require('./src/db');
 const { parseUserAgent, parseIcecastClientsPayload } = require('./src/parser');
 const { lookupIp, resolveIpHighAccuracy } = require('./src/geoip');
@@ -450,6 +452,8 @@ app.get('/api/dashboard', async (req, res) => {
         connectedSeconds: l.connectedSeconds,
         isBot: l.isBot,
       })),
+      detractorSongs: breakdowns24h.detractorSongs,
+      detractorSummary: breakdowns24h.detractorSummary,
     },
     '24h': breakdowns24h,
     '7d': breakdowns7d,
@@ -524,12 +528,25 @@ app.get('/api/dashboard', async (req, res) => {
       durationBuckets: breakdownsLive.durationBuckets,
     },
     breakdownsByPeriod,
+    detractorSongs: breakdowns24h.detractorSongs || getDetractorSongs(1440, modeForHistory, excludeBots, 10),
+    detractorSummary: breakdowns24h.detractorSummary || getDetractorSummary(1440, modeForHistory, excludeBots),
     timeOfDay,
     topReturningListeners,
     history,
     trackChanges,
     recentEvents: stats24h.recentEvents,
   });
+});
+
+// API: Detractor Songs (Tune-Outs & Drop-offs)
+app.get('/api/detractor-songs', (req, res) => {
+  const rangeMinutes = req.query.rangeMinutes !== undefined ? parseInt(req.query.rangeMinutes, 10) : 1440;
+  const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '10', 10)));
+  const mode = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
+  const songs = getDetractorSongs(rangeMinutes, mode, excludeBots, limit);
+  const summary = getDetractorSummary(rangeMinutes, mode, excludeBots);
+  res.json({ ok: true, rangeMinutes, excludeBots, songs, summary });
 });
 
 // API: Force immediate poll

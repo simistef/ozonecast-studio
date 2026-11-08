@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=10" />
+  <link rel="stylesheet" href="/index.css?v=11" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -453,6 +453,34 @@
       </div>
     </section>
 
+    <!-- Row 2.75: Detractor Songs — Tune-Out & Drop-Off Analytics -->
+    <section class="panel" id="detractorSongsPanel" aria-label="Detractor songs and tune-out leaderboard">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>
+            <span>Detractor Songs — Listener Drop-Off Leaderboard</span>
+            <span id="detractorScopeBadge" class="time-bound-badge time-24h">⏱️ Past 24h</span>
+            <span id="detractorTotalDropsBadge" class="mount-tag" style="background:hsla(355,84%,60%,0.15);color:hsl(355,95%,80%);border-color:hsla(355,80%,65%,0.35);font-size:11px">📉 0 Tune-Outs</span>
+          </h2>
+          <div class="panel-subtitle">Tracks with the highest listener churn • includes average playtime into song when left &amp; previous station listening stay</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="segmented-tabs" id="detractorScopeTabs">
+            <button class="seg-btn active" data-scope="past_24h">Past 24h</button>
+            <button class="seg-btn" data-scope="past_7d">Past 7d</button>
+            <button class="seg-btn" data-scope="all_time">All-Time</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+        <!-- 4-Card Summary Strip for Detractor Metrics -->
+        <div id="detractorKpiStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
+
+        <!-- Leaderboard Table / Rows -->
+        <div id="detractorSongsList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </section>
+
     <!-- Row 3: RadioToolbox / StatCast User-Agent & Platform Telemetry -->
     <section class="row-tri" aria-label="User-Agent and device telemetry">
       <div class="panel">
@@ -643,7 +671,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=10"></script>
-  <script src="/app.js?v=10"></script>
+  <script src="/world-map.js?v=11"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

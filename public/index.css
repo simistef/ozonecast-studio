@@ -1429,3 +1429,25 @@ button, input, select, textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Detractor Songs Section */
+.detractor-row {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.detractor-row:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-hover) !important;
+}
+
+@media (max-width: 960px) {
+  #detractorKpiStrip {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  #detractorKpiStrip {
+    grid-template-columns: 1fr !important;
+  }
+}

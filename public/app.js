@@ -38,6 +38,18 @@
     return `${secs}s`;
   }
 
+  function formatRelativeTime(ts) {
+    if (!ts) return '--';
+    const diffSec = Math.max(0, Math.floor((Date.now() - Number(ts)) / 1000));
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  }
+
   function escapeHtml(str) {
     return String(str ?? '')
       .replace(/&/g, '&amp;')
@@ -337,6 +349,9 @@
     renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, kpis);
     renderTopReturningListeners(dashboardState.topReturningListeners, kpis);
 
+    // 4.75. Detractor Songs (Tune-Outs & Drop-Off Analytics)
+    renderDetractorSongs(activeBreakdowns.detractorSongs || dashboardState.detractorSongs, activeBreakdowns.detractorSummary || dashboardState.detractorSummary);
+
     // 5. User-Agent / Player / OS Breakdowns
     renderDistributionList('playersDistList', activeBreakdowns.players, 'amber');
     renderDistributionList('categoriesDistList', activeBreakdowns.categories, 'cyan');
@@ -593,6 +608,182 @@
     container.querySelectorAll('[data-inspect-ip]').forEach(btn => {
       btn.addEventListener('click', () => openIpInspector(btn.getAttribute('data-inspect-ip')));
     });
+  }
+
+  // Render Detractor Songs (Tune-Outs & Drop-Off Analytics)
+  let detractorScopeMode = localStorage.getItem('ozonecast_detractor_scope') || 'past_24h';
+
+  function renderDetractorSongs(songsData, summaryData) {
+    const listEl = document.getElementById('detractorSongsList');
+    const kpiEl = document.getElementById('detractorKpiStrip');
+    const scopeBadge = document.getElementById('detractorScopeBadge');
+    const dropsBadge = document.getElementById('detractorTotalDropsBadge');
+
+    let songs = songsData;
+    let summary = summaryData;
+
+    const periodKeyMap = {
+      past_24h: '24h',
+      past_7d: '7d',
+      all_time: 'all',
+    };
+    const periodKey = periodKeyMap[detractorScopeMode] || '24h';
+    if (dashboardState?.breakdownsByPeriod && dashboardState.breakdownsByPeriod[periodKey]) {
+      const pData = dashboardState.breakdownsByPeriod[periodKey];
+      if (pData.detractorSongs) songs = pData.detractorSongs;
+      if (pData.detractorSummary) summary = pData.detractorSummary;
+    }
+
+    const scopeLabels = {
+      past_24h: { text: '⏱️ Past 24h', badgeClass: 'time-bound-badge time-24h' },
+      past_7d: { text: '📅 Past 7d', badgeClass: 'time-bound-badge time-7d' },
+      all_time: { text: '🏆 All-Time', badgeClass: 'time-bound-badge alltime' },
+    };
+    const curScope = scopeLabels[detractorScopeMode] || scopeLabels.past_24h;
+
+    if (scopeBadge) {
+      scopeBadge.textContent = curScope.text;
+      scopeBadge.className = curScope.badgeClass;
+    }
+
+    const totalDrops = summary?.totalTuneOuts ?? (songs || []).reduce((acc, s) => acc + (s.leaveCount || 0), 0);
+    if (dropsBadge) {
+      dropsBadge.textContent = `📉 ${totalDrops} Tune-Out${totalDrops === 1 ? '' : 's'}`;
+    }
+
+    // Sync button active state
+    document.querySelectorAll('#detractorScopeTabs .seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-scope') === detractorScopeMode);
+    });
+
+    // 1. Render 4-Card Summary Strip
+    if (kpiEl) {
+      const topTrack = (songs && songs[0]) || null;
+      const topTrackTitle = topTrack ? topTrack.track : 'None';
+      const avgPlaytime = summary?.avgPlaytimeWhenLeftSec || (topTrack ? topTrack.avgPlaytimeWhenLeftSec : 0);
+      const avgStationStay = summary?.avgStationStaySec || (topTrack ? topTrack.avgStationStaySec : 0);
+      const totalLostHrs = ((summary?.totalLostListeningSec || 0) / 3600).toFixed(1);
+
+      kpiEl.innerHTML = `
+        <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:9px 12px">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600">TOTAL TUNE-OUTS</div>
+          <div class="mono" style="margin-top:2px;font-size:16px;font-weight:700;color:var(--accent-crimson)">
+            ${totalDrops} <span style="font-size:11px;font-weight:500;color:var(--text-secondary)">drops</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
+            ${summary?.uniqueDroppedListeners || 0} unique listeners • ${summary?.songsAffected || (songs || []).length} songs
+          </div>
+        </div>
+
+        <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:9px 12px;min-width:0">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600">TOP DETRACTOR SONG</div>
+          <div class="mono" style="margin-top:2px;font-size:14px;font-weight:700;color:var(--accent-amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(topTrackTitle)}">
+            ${topTrack ? `#1 (${topTrack.leaveCount} drops)` : 'None'}
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(topTrackTitle)}">
+            ${escapeHtml(topTrackTitle)}
+          </div>
+        </div>
+
+        <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:9px 12px">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600">AVG PLAYTIME WHEN LEFT</div>
+          <div class="mono" style="margin-top:2px;font-size:16px;font-weight:700;color:var(--accent-cyan)">
+            ${avgPlaytime > 0 ? formatDurationClock(avgPlaytime) : '--:--'}
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
+            ${avgPlaytime > 0 ? `${formatDurationHuman(avgPlaytime)} into song` : 'No song progress recorded'}
+          </div>
+        </div>
+
+        <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:9px 12px">
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600">PREVIOUS STATION STAY</div>
+          <div class="mono" style="margin-top:2px;font-size:16px;font-weight:700;color:var(--accent-emerald)">
+            ${avgStationStay > 0 ? formatDurationHuman(avgStationStay) : '0s'}
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
+            Avg station stay • ${totalLostHrs} hrs lost
+          </div>
+        </div>
+      `;
+    }
+
+    // 2. Render Leaderboard List
+    if (!listEl) return;
+    const items = songs || [];
+    if (items.length === 0) {
+      listEl.innerHTML = `
+        <div style="color:var(--text-muted);font-size:12.5px;padding:18px 14px;background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;text-align:center">
+          No listener tune-outs recorded for ${curScope.text.replace(/^[^\w]+/, '')} yet.
+          <div style="font-size:11.5px;color:var(--text-secondary);margin-top:4px">
+            Whenever listeners disconnect while a song is broadcasting, OzoneCast records the song title, playtime progress at disconnect, and their total station listening time.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const maxDrops = items[0]?.leaveCount || 1;
+
+    listEl.innerHTML = items
+      .map(song => {
+        const pctOfTop = Math.min(100, Math.max(8, Math.round((song.leaveCount / maxDrops) * 100)));
+        const isNumOne = song.rank === 1;
+        const rankColor = isNumOne ? 'var(--accent-crimson)' : 'var(--accent-amber)';
+        const rankBg = isNumOne ? 'hsla(355,84%,60%,0.15)' : 'hsla(28,95%,56%,0.12)';
+        const rankBorder = isNumOne ? 'hsla(355,84%,60%,0.35)' : 'hsla(28,95%,56%,0.3)';
+
+        const earlyDropTag = song.earlyDropoffs30s > 0
+          ? `<span class="kpi-subtag amber" style="font-size:10.5px;padding:1px 6px" title="${song.earlyDropoffs30s} listener(s) disconnected in the first 30s of this song">⚡ ${song.earlyDropoffPct}% left &lt; 30s</span>`
+          : '';
+
+        const minMaxStay = (song.minStationStaySec > 0 || song.maxStationStaySec > 0)
+          ? `<span style="color:var(--text-muted);font-size:11px">(Min ${formatDurationHuman(song.minStationStaySec)} • Max ${formatDurationHuman(song.maxStationStaySec)})</span>`
+          : '';
+
+        return `
+          <div class="event-row detractor-row" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px">
+            <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1">
+              <span class="mono" style="font-weight:700;font-size:13px;color:${rankColor};background:${rankBg};border:1px solid ${rankBorder};border-radius:4px;padding:2px 7px;width:30px;text-align:center;flex-shrink:0">#${song.rank}</span>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13.5px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:440px" title="${escapeHtml(song.track)}">
+                    🎵 ${escapeHtml(song.track)}
+                  </span>
+                  <span class="mount-tag" style="background:hsla(355,84%,60%,0.15);color:hsl(355,95%,80%);border-color:hsla(355,80%,65%,0.3);font-size:11px;font-weight:600">
+                    ${song.leaveCount} drop-off${song.leaveCount === 1 ? '' : 's'} (${song.uniqueIps} IP${song.uniqueIps === 1 ? '' : 's'})
+                  </span>
+                  ${earlyDropTag}
+                </div>
+
+                <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap">
+                  <div>
+                    ⏱️ Playtime when left: <strong class="mono" style="color:var(--accent-amber);font-weight:600">${song.avgPlaytimeWhenLeftSec > 0 ? formatDurationClock(song.avgPlaytimeWhenLeftSec) : '--:--'}</strong>
+                    <span style="color:var(--text-muted);font-size:11px">${song.avgPlaytimeWhenLeftSec > 0 ? `(${formatDurationHuman(song.avgPlaytimeWhenLeftSec)} into song)` : ''}</span>
+                  </div>
+                  <div>
+                    📻 Previous station stay: <strong class="mono" style="color:var(--accent-emerald);font-weight:600">${formatDurationHuman(song.avgStationStaySec)}</strong>
+                    ${minMaxStay}
+                  </div>
+                  <div>
+                    📉 Total listening lost: <strong class="mono" style="color:var(--text-primary);font-weight:600">${(song.totalLostListeningSec / 3600).toFixed(2)} hrs</strong>
+                  </div>
+                </div>
+
+                <!-- Relative Intensity Meter -->
+                <div style="width:100%;height:3px;background:hsla(210,20%,90%,0.08);border-radius:2px;margin-top:7px;overflow:hidden">
+                  <div style="width:${pctOfTop}%;height:100%;background:linear-gradient(90deg, var(--accent-amber), var(--accent-crimson));border-radius:2px"></div>
+                </div>
+              </div>
+            </div>
+
+            <div style="text-align:right;flex-shrink:0" class="mono">
+              <div style="font-size:13.5px;font-weight:700;color:var(--accent-crimson)">${song.leaveCount} Tune-Out${song.leaveCount === 1 ? '' : 's'}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${formatRelativeTime(song.lastDropTs)}</div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
   }
 
   function renderGeoBreakdown(breakdowns) {
@@ -1688,6 +1879,7 @@
           const activeBreakdowns = getActiveBreakdowns();
           renderGeoBreakdown(activeBreakdowns);
           renderRetentionAndEvents(activeBreakdowns.durationBuckets, dashboardState.recentEvents);
+          renderDetractorSongs(activeBreakdowns.detractorSongs, activeBreakdowns.detractorSummary);
           renderDistributionList('playersDistList', activeBreakdowns.players, 'amber');
           renderDistributionList('categoriesDistList', activeBreakdowns.categories, 'cyan');
           renderDistributionList('platformsDistList', activeBreakdowns.platforms, 'emerald');
@@ -1713,6 +1905,23 @@
           all: 'All-Time Station History',
         };
         showToast(`Audience breakdowns switched to: ${scopeNames[scope] || scope}`);
+      });
+    });
+
+    // Detractor Songs Scope Tabs
+    document.querySelectorAll('#detractorScopeTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const scope = btn.getAttribute('data-scope') || 'past_24h';
+        detractorScopeMode = scope;
+        localStorage.setItem('ozonecast_detractor_scope', scope);
+        const activeBreakdowns = getActiveBreakdowns();
+        renderDetractorSongs(activeBreakdowns?.detractorSongs, activeBreakdowns?.detractorSummary);
+        const scopeNames = {
+          past_24h: 'Past 24 Hours',
+          past_7d: 'Past 7 Days',
+          all_time: 'All-Time Station History',
+        };
+        showToast(`Detractor songs scope: ${scopeNames[scope] || scope}`);
       });
     });
 

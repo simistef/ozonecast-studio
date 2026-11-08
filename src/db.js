@@ -209,6 +209,23 @@ try {
   `);
 } catch (_) {}
 
+try {
+  db.exec(`
+    UPDATE listener_sessions
+    SET last_track = CASE (ABS(RANDOM()) % 6)
+      WHEN 0 THEN 'Peggy Gou - (It Goes Like) Nanana'
+      WHEN 1 THEN 'Fred again.. & Swedish House Mafia - Turn On The Lights again..'
+      WHEN 2 THEN 'RÜFÜS DU SOL - On My Knees (Live Broadcast Mix)'
+      WHEN 3 THEN 'Bonobo & Jacques Greene - Fold'
+      WHEN 4 THEN 'Disclosure - Higher Than Ever Before'
+      ELSE 'Bicep - Apricots (Ozone.FM Club Edit)'
+    END,
+    last_track_progress_sec = 25 + (ABS(RANDOM()) % 150)
+    WHERE (last_track IS NULL OR last_track = '') AND source_mode = 'simulation';
+  `);
+} catch (_) {}
+
+
 const upsertSessionStmt = db.prepare(`
   INSERT INTO listener_sessions (
     session_key, client_id, ip, mount, user_agent, player, category, os,
@@ -326,13 +343,13 @@ function recordPollResult({
     SET is_active = 0,
         last_seen = ?,
         last_track = CASE WHEN ? != '' THEN ? ELSE last_track END,
-        last_track_progress_sec = ?
+        last_track_progress_sec = CASE WHEN ? > 0 THEN ? ELSE last_track_progress_sec END
     WHERE session_key = ?
   `);
   for (const [key, prev] of prevMap.entries()) {
     if (!currentKeys.has(key)) {
       const exitTrack = currentTrack || lastTrack || '';
-      markInactiveStmt.run(now, exitTrack, exitTrack, trackProgressSec || 0, key);
+      markInactiveStmt.run(now, exitTrack, exitTrack, trackProgressSec || 0, trackProgressSec || 0, key);
       const progressLabel = trackProgressSec > 0 ? ` at ${formatDurationClock(trackProgressSec)}` : '';
       insertEventStmt.run(
         now,
@@ -735,6 +752,125 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
       sharePct: Number(((b.count / total) * 100).toFixed(1)),
     })),
     mapLocations,
+    detractorSongs: getDetractorSongs(rangeMinutes, sourceMode, excludeBots, 10),
+    detractorSummary: getDetractorSummary(rangeMinutes, sourceMode, excludeBots),
+  };
+}
+
+/**
+ * Query Detractor Songs — songs with highest listener drop-offs.
+ * Includes average playtime into song when left and previous listener station stay time.
+ */
+function getDetractorSongs(rangeMinutes = 1440, sourceMode = null, excludeBots = false, limit = 10) {
+  const now = Date.now();
+  const since = rangeMinutes > 0 ? now - rangeMinutes * 60 * 1000 : 0;
+
+  const botFilter = excludeBots ? `
+    AND category != 'Bot / Ripper'
+    AND ip NOT IN (SELECT ip FROM bot_ips)
+    AND LOWER(user_agent) NOT LIKE '%bot%'
+    AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+    AND LOWER(user_agent) NOT LIKE '%crawler%'
+    AND LOWER(user_agent) NOT LIKE '%spider%'
+    AND LOWER(user_agent) NOT LIKE '%streamripper%'
+  ` : '';
+
+  const modeFilter = sourceMode ? 'AND source_mode = ?' : '';
+  const params = [];
+  if (since > 0) params.push(since);
+  if (sourceMode) params.push(sourceMode);
+  params.push(limit);
+
+  const sql = `
+    SELECT
+      last_track as track,
+      COUNT(*) as leave_count,
+      COUNT(DISTINCT ip) as unique_ips,
+      ROUND(AVG(duration_seconds)) as avg_station_stay_sec,
+      MIN(duration_seconds) as min_station_stay_sec,
+      MAX(duration_seconds) as max_station_stay_sec,
+      SUM(duration_seconds) as total_lost_listening_sec,
+      ROUND(AVG(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END)) as avg_playtime_when_left_sec,
+      MIN(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END) as min_playtime_when_left_sec,
+      MAX(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END) as max_playtime_when_left_sec,
+      SUM(CASE WHEN last_track_progress_sec > 0 AND last_track_progress_sec <= 30 THEN 1 ELSE 0 END) as early_dropoffs_30s,
+      MAX(last_seen) as last_drop_ts
+    FROM listener_sessions
+    WHERE is_active = 0
+      AND last_track IS NOT NULL
+      AND TRIM(last_track) != ''
+      AND last_track != 'No track metadata recorded'
+      ${since > 0 ? 'AND last_seen >= ?' : ''}
+      ${modeFilter}
+      ${botFilter}
+    GROUP BY last_track
+    ORDER BY leave_count DESC, total_lost_listening_sec DESC
+    LIMIT ?
+  `;
+
+  return db.prepare(sql).all(...params).map((row, idx) => ({
+    rank: idx + 1,
+    track: row.track,
+    leaveCount: Number(row.leave_count),
+    uniqueIps: Number(row.unique_ips),
+    avgStationStaySec: Number(row.avg_station_stay_sec || 0),
+    minStationStaySec: Number(row.min_station_stay_sec || 0),
+    maxStationStaySec: Number(row.max_station_stay_sec || 0),
+    totalLostListeningSec: Number(row.total_lost_listening_sec || 0),
+    avgPlaytimeWhenLeftSec: Number(row.avg_playtime_when_left_sec || 0),
+    minPlaytimeWhenLeftSec: Number(row.min_playtime_when_left_sec || 0),
+    maxPlaytimeWhenLeftSec: Number(row.max_playtime_when_left_sec || 0),
+    earlyDropoffs30s: Number(row.early_dropoffs_30s || 0),
+    earlyDropoffPct: row.leave_count > 0 ? Math.round((row.early_dropoffs_30s / row.leave_count) * 100) : 0,
+    lastDropTs: Number(row.last_drop_ts || 0),
+  }));
+}
+
+function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots = false) {
+  const now = Date.now();
+  const since = rangeMinutes > 0 ? now - rangeMinutes * 60 * 1000 : 0;
+
+  const botFilter = excludeBots ? `
+    AND category != 'Bot / Ripper'
+    AND ip NOT IN (SELECT ip FROM bot_ips)
+    AND LOWER(user_agent) NOT LIKE '%bot%'
+    AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+    AND LOWER(user_agent) NOT LIKE '%crawler%'
+    AND LOWER(user_agent) NOT LIKE '%spider%'
+    AND LOWER(user_agent) NOT LIKE '%streamripper%'
+  ` : '';
+
+  const modeFilter = sourceMode ? 'AND source_mode = ?' : '';
+  const params = [];
+  if (since > 0) params.push(since);
+  if (sourceMode) params.push(sourceMode);
+
+  const sql = `
+    SELECT
+      COUNT(*) as total_tuneouts,
+      COUNT(DISTINCT last_track) as songs_affected,
+      COUNT(DISTINCT ip) as unique_dropped_listeners,
+      ROUND(AVG(duration_seconds)) as avg_station_stay_sec,
+      ROUND(AVG(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END)) as avg_playtime_when_left_sec,
+      SUM(duration_seconds) as total_lost_listening_sec
+    FROM listener_sessions
+    WHERE is_active = 0
+      AND last_track IS NOT NULL
+      AND TRIM(last_track) != ''
+      AND last_track != 'No track metadata recorded'
+      ${since > 0 ? 'AND last_seen >= ?' : ''}
+      ${modeFilter}
+      ${botFilter}
+  `;
+
+  const row = db.prepare(sql).get(...params);
+  return {
+    totalTuneOuts: Number(row?.total_tuneouts || 0),
+    songsAffected: Number(row?.songs_affected || 0),
+    uniqueDroppedListeners: Number(row?.unique_dropped_listeners || 0),
+    avgStationStaySec: Number(row?.avg_station_stay_sec || 0),
+    avgPlaytimeWhenLeftSec: Number(row?.avg_playtime_when_left_sec || 0),
+    totalLostListeningSec: Number(row?.total_lost_listening_sec || 0),
   };
 }
 
@@ -1172,4 +1308,6 @@ module.exports = {
   logCustomEvent,
   getCachedGeoIp,
   setCachedGeoIp,
+  getDetractorSongs,
+  getDetractorSummary,
 };

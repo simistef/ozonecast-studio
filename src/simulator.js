@@ -173,8 +173,9 @@ function seedSimulationHistory() {
     INSERT OR IGNORE INTO listener_sessions (
       session_key, client_id, ip, mount, user_agent, player, category, os,
       country_code, country_name, city, lat, lon,
-      first_seen, last_seen, duration_seconds, is_active, source_mode
-    ) VALUES (?, ?, ?, '/listen', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'simulation')
+      first_seen, last_seen, duration_seconds, is_active, source_mode,
+      last_track, last_track_progress_sec
+    ) VALUES (?, ?, ?, '/listen', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'simulation', ?, ?)
   `);
 
   for (const prof of returningProfiles) {
@@ -182,6 +183,8 @@ function seedSimulationHistory() {
       const endTs = now - s * 5.5 * 3600 * 1000;
       const dur = Math.round(prof.avgSec * (0.75 + ((s * 17) % 50) / 100));
       const startTs = endTs - dur * 1000;
+      const track = TRACK_ROTATION[(s * 3 + prof.sessions) % TRACK_ROTATION.length];
+      const trackProgress = 20 + ((s * 41) % 155);
       insertHistSession.run(
         `simulation:hist:${prof.ip}:${s}`,
         String(3000 + s),
@@ -197,7 +200,9 @@ function seedSimulationHistory() {
         prof.lon,
         startTs,
         endTs,
-        dur
+        dur,
+        track,
+        trackProgress
       );
     }
   }
