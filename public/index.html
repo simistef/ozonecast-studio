@@ -8,103 +8,129 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=7" />
+  <link rel="stylesheet" href="/index.css?v=8" />
 </head>
 <body>
-  <!-- Top Broadcast Telemetry Bar -->
+  <!-- Top Broadcast Telemetry Bar (Sticky) -->
   <header class="topbar" role="banner">
-    <div class="brand-cluster">
-      <div class="station-emblem" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
-          <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path>
-          <circle cx="12" cy="12" r="2"></circle>
-          <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path>
-          <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
-        </svg>
-      </div>
-      <div class="brand-titles">
-        <h1>
-          <span id="stationNameHeading">OZONE.FM</span>
-          <span id="mountBadge" class="mount-tag">/listen</span>
-        </h1>
-        <div class="brand-subtitle">
-          <span id="endpointHostDisplay" class="mono">live.ozone.fm:8443</span>
-          <span>•</span>
-          <span id="streamFormatSpec" class="mono">320 kbps AAC+</span>
+    <div class="topbar-main">
+      <div class="brand-cluster">
+        <div class="station-emblem" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"></path>
+            <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"></path>
+            <circle cx="12" cy="12" r="2"></circle>
+            <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"></path>
+            <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"></path>
+          </svg>
         </div>
+        <div class="brand-titles">
+          <h1>
+            <span id="stationNameHeading">OZONE.FM</span>
+            <span id="mountBadge" class="mount-tag">/listen</span>
+          </h1>
+          <div class="brand-subtitle">
+            <span id="endpointHostDisplay" class="mono">live.ozone.fm:8443</span>
+            <span>•</span>
+            <span id="streamFormatSpec" class="mono">320 kbps AAC+</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Built-in Stream Audio Preview & Metadata Ticker -->
+      <div class="stream-monitor" aria-label="Live stream audio monitor">
+        <button id="toggleAudioBtn" class="play-stream-btn" title="Listen to live stream (https://live.ozone.fm:8443/listen)" aria-label="Toggle live audio stream">
+          <svg id="playIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 4 20 12 6 20 6 4"></polygon>
+          </svg>
+        </button>
+        <div class="stream-meta-col">
+          <div class="stream-now-playing-label">
+            <span>ON AIR MONITOR</span>
+            <span id="lastUpdatedClock" class="mono">--:--:--</span>
+          </div>
+          <div id="nowPlayingTitle" class="stream-track-title">Connecting to stream metadata...</div>
+        </div>
+        <div id="vuMeterBars" class="vu-bars" aria-hidden="true">
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
+        </div>
+        <audio id="liveStreamAudio" preload="none" crossorigin="anonymous"></audio>
+      </div>
+
+      <!-- Station Settings & Diagnostic Controls -->
+      <div class="topbar-actions">
+        <select id="pollIntervalSelect" class="select-control" aria-label="Polling interval">
+          <option value="5">Poll: 5s</option>
+          <option value="10" selected>Poll: 10s</option>
+          <option value="30">Poll: 30s</option>
+          <option value="60">Poll: 60s</option>
+        </select>
+
+        <button id="manualRefreshBtn" class="btn" title="Poll Icecast endpoint immediately">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span>Refresh</span>
+        </button>
+
+        <button id="openImportModalBtn" class="btn" title="Paste raw HTML/XML from listclients.xsl">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Import XSL</span>
+        </button>
+
+        <button id="openSettingsModalBtn" class="btn btn-primary">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Icecast Server</span>
+        </button>
       </div>
     </div>
 
-    <!-- Built-in Stream Audio Preview & Metadata Ticker -->
-    <div class="stream-monitor" aria-label="Live stream audio monitor">
-      <button id="toggleAudioBtn" class="play-stream-btn" title="Listen to live stream (https://live.ozone.fm:8443/listen)" aria-label="Toggle live audio stream">
-        <svg id="playIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <polygon points="6 4 20 12 6 20 6 4"></polygon>
-        </svg>
-      </button>
-      <div class="stream-meta-col">
-        <div class="stream-now-playing-label">
-          <span>ON AIR MONITOR</span>
-          <span id="lastUpdatedClock" class="mono">--:--:--</span>
+    <!-- Pinned Telemetry Status & Audience Period Filter Strip -->
+    <div class="topbar-subbar" aria-label="Audience breakdown timeframe and connection status">
+      <div class="topbar-subbar-left">
+        <div id="connectionStatusBadge" class="status-badge">
+          <span class="status-dot"></span>
+          <span id="connectionStatusText">Probing Icecast...</span>
         </div>
-        <div id="nowPlayingTitle" class="stream-track-title">Connecting to stream metadata...</div>
-      </div>
-      <div id="vuMeterBars" class="vu-bars" aria-hidden="true">
-        <div class="vu-bar"></div>
-        <div class="vu-bar"></div>
-        <div class="vu-bar"></div>
-        <div class="vu-bar"></div>
-        <div class="vu-bar"></div>
-      </div>
-      <audio id="liveStreamAudio" preload="none" crossorigin="anonymous"></audio>
-    </div>
 
-    <!-- Telemetry Controls -->
-    <div class="topbar-actions">
-      <div id="connectionStatusBadge" class="status-badge">
-        <span class="status-dot"></span>
-        <span id="connectionStatusText">Probing Icecast...</span>
+        <label class="topbar-check-label" id="excludeBotsWrap" title="Exclude flagged bots and stream rippers from telemetry statistics and graphs">
+          <input type="checkbox" id="excludeBotsCheckbox" />
+          <span class="topbar-check-indicator"></span>
+          <span class="topbar-check-text">Exclude Bots</span>
+        </label>
       </div>
 
-      <select id="pollIntervalSelect" class="select-control" aria-label="Polling interval">
-        <option value="5">Poll: 5s</option>
-        <option value="10" selected>Poll: 10s</option>
-        <option value="30">Poll: 30s</option>
-        <option value="60">Poll: 60s</option>
-      </select>
-
-      <button id="manualRefreshBtn" class="btn" title="Poll Icecast endpoint immediately">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <polyline points="1 20 1 14 7 14"></polyline>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-        </svg>
-        <span>Refresh</span>
-      </button>
-
-      <button id="openImportModalBtn" class="btn" title="Paste raw HTML/XML from listclients.xsl">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="17 8 12 3 7 8"></polyline>
-          <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
-        <span>Import XSL</span>
-      </button>
-
-      <label class="topbar-check-label" id="excludeBotsWrap" title="Exclude flagged bots and stream rippers from telemetry statistics and graphs">
-        <input type="checkbox" id="excludeBotsCheckbox" />
-        <span class="topbar-check-indicator"></span>
-        <span class="topbar-check-text">Exclude Bots</span>
-      </label>
-
-      <button id="openSettingsModalBtn" class="btn btn-primary">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-        <span>Icecast Server</span>
-      </button>
+      <div class="topbar-scope-cluster">
+        <span class="topbar-scope-label">Period Scope:</span>
+        <div class="segmented-tabs" id="breakdownScopeTabs" role="tablist" aria-label="Audience breakdown time window">
+          <button class="seg-btn active" data-scope="live" title="Currently active streaming listeners">
+            <span class="scope-dot live"></span> Live Active
+          </button>
+          <button class="seg-btn" data-scope="24h" title="All listener sessions recorded in SQLite over the past 24 hours">
+            ⏱️ Past 24h
+          </button>
+          <button class="seg-btn" data-scope="7d" title="All listener sessions recorded in SQLite over the past 7 days">
+            📅 Past 7d
+          </button>
+          <button class="seg-btn" data-scope="all" title="All recorded listener sessions across entire SQLite station history">
+            🏆 All-Time
+          </button>
+        </div>
+        <span id="breakdownActiveScopeBadge" class="time-bound-badge live">Live Active Connections</span>
+      </div>
     </div>
   </header>
 
@@ -266,33 +292,6 @@
             </tr>
           </tbody>
         </table>
-      </div>
-    </section>
-
-    <!-- Audience Breakdown Time Window Control Toolbar -->
-    <section class="breakdown-scope-strip" aria-label="Audience breakdown timeframe filter">
-      <div class="breakdown-scope-info">
-        <div class="breakdown-scope-title-row">
-          <span class="breakdown-scope-title">Audience Breakdown Scope</span>
-          <span id="breakdownActiveScopeBadge" class="time-bound-badge live">Live Active Connections</span>
-        </div>
-        <div class="breakdown-scope-subtitle">
-          Controls time window for Geolocation Map, Countries, Cities, Retention cohorts, Players, and Operating Systems
-        </div>
-      </div>
-      <div class="segmented-tabs" id="breakdownScopeTabs" role="tablist" aria-label="Audience breakdown time window">
-        <button class="seg-btn active" data-scope="live" title="Currently active streaming listeners">
-          <span class="scope-dot live"></span> Live Active
-        </button>
-        <button class="seg-btn" data-scope="24h" title="All listener sessions recorded in SQLite over the past 24 hours">
-          ⏱️ Past 24h
-        </button>
-        <button class="seg-btn" data-scope="7d" title="All listener sessions recorded in SQLite over the past 7 days">
-          📅 Past 7d
-        </button>
-        <button class="seg-btn" data-scope="all" title="All recorded listener sessions across entire SQLite station history">
-          🏆 All-Time
-        </button>
       </div>
     </section>
 
@@ -644,7 +643,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=7"></script>
-  <script src="/app.js?v=7"></script>
+  <script src="/world-map.js?v=8"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>
