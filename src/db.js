@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const { parseUserAgent } = require('./parser');
+const { parseUserAgent, deduplicateListenersByDevice } = require('./parser');
 
 function openDatabaseWithFallback() {
   const primaryDir = path.join(__dirname, '..', 'data');
@@ -265,15 +265,22 @@ function recordPollResult({
   const now = Date.now();
   const uniqueIps = new Set(enrichedListeners.map(l => l.ip)).size;
   const humanListeners = enrichedListeners.filter(l => !l.isBot);
-  const humanCount = humanListeners.length;
+
+  // Deduplicate listeners by (IP + Player / User-Agent):
+  // Same IP and player/agent count as 1 listener, unless separate players/agents.
+  const deduplicatedListeners = deduplicateListenersByDevice(enrichedListeners);
+  const deduplicatedHumanListeners = deduplicateListenersByDevice(humanListeners);
+
+  const listenerCount = deduplicatedListeners.length;
+  const humanCount = deduplicatedHumanListeners.length;
   const humanUniqueIps = new Set(humanListeners.map(l => l.ip)).size;
 
   insertSnapshotStmt.run(
     now,
     mount,
-    enrichedListeners.length,
+    listenerCount,
     uniqueIps,
-    reportedPeak || enrichedListeners.length,
+    reportedPeak || listenerCount,
     currentTrack || '',
     bitrate || 128,
     sourceMode,

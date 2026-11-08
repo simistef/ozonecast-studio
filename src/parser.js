@@ -575,10 +575,62 @@ function parseStatusJson(jsonData, targetMount = '/listen') {
   }
 }
 
+/**
+ * Builds a composite device/agent key for a listener connection.
+ * If multiple connections share the same IP and the same player user agent, they share the same key (count as 1).
+ * Separate players or user-agents on the same IP produce different keys and are counted separately.
+ */
+function getListenerDeviceKey(l) {
+  const ip = String(l.ip || '').trim();
+  const player = (l.ua?.player && l.ua.player !== 'Audio Client' && l.ua.player !== 'Unknown')
+    ? l.ua.player.trim().toLowerCase()
+    : '';
+  const os = (l.ua?.os && l.ua.os !== 'Unknown')
+    ? l.ua.os.trim().toLowerCase()
+    : '';
+  const ua = String(l.userAgent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const agentKey = (player || os) ? `${player}::${os}` : ua;
+  return `${ip}::${agentKey}`;
+}
+
+/**
+ * Deduplicates listener stream connections by (IP + Player / User-Agent).
+ * Multiple simultaneous connections from the same IP with the same player/UA combine into 1 listener.
+ * Connections from the same IP with different players or agents remain distinct listeners.
+ */
+function deduplicateListenersByDevice(listeners) {
+  const map = new Map();
+  for (const l of listeners || []) {
+    const key = getListenerDeviceKey(l);
+    if (!map.has(key)) {
+      map.set(key, {
+        ...l,
+        streamCount: 1,
+        streams: [l],
+        allClientIds: [String(l.clientId)],
+        connectionsFromIp: l.connectionsFromIp || 1,
+      });
+    } else {
+      const existing = map.get(key);
+      existing.streamCount++;
+      existing.streams.push(l);
+      existing.allClientIds.push(String(l.clientId));
+      if ((l.connectedSeconds || 0) > (existing.connectedSeconds || 0)) {
+        existing.connectedSeconds = l.connectedSeconds;
+        existing.clientId = l.clientId;
+      }
+      existing.connectionsFromIp = Math.max(existing.connectionsFromIp || 1, existing.streams.length);
+    }
+  }
+  return Array.from(map.values());
+}
+
 module.exports = {
   parseUserAgent,
   parseIcecastClientsPayload,
   parseStatusJson,
   extractSourceMetaFromXml,
   xmlParser,
+  getListenerDeviceKey,
+  deduplicateListenersByDevice,
 };

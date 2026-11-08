@@ -58,6 +58,22 @@
       .replace(/"/g, '&quot;');
   }
 
+  // Composite device/agent key:
+  // Same IP + same player/user-agent count as 1 listener.
+  // Separate players or agents on the same IP count as separate listeners.
+  function getListenerDeviceKey(l) {
+    const ip = String(l.ip || '').trim();
+    const player = (l.ua?.player && l.ua.player !== 'Audio Client' && l.ua.player !== 'Unknown')
+      ? l.ua.player.trim().toLowerCase()
+      : '';
+    const os = (l.ua?.os && l.ua.os !== 'Unknown')
+      ? l.ua.os.trim().toLowerCase()
+      : '';
+    const ua = String(l.userAgent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const agentKey = (player || os) ? `${player}::${os}` : ua;
+    return `${ip}::${agentKey}`;
+  }
+
   function isoToFlagEmoji(cc) {
     const code = String(cc || '').trim().toUpperCase();
     if (!/^[A-Z]{2}$/.test(code) || code === 'UN' || code === 'XX' || code === 'LO') return '🌐';
@@ -260,7 +276,11 @@
     // 2. KPI Cards
     const capPct = Math.min(100, Math.round((kpis.currentListeners / (kpis.maxCapacity || 500)) * 100));
     document.getElementById('kpiCurrentListeners').textContent = kpis.currentListeners;
-    document.getElementById('kpiUniqueIpsTag').textContent = `${kpis.uniqueIps} unique IPs`;
+    const totalStreams = kpis.totalStreams || kpis.totalListenersRaw || kpis.currentListeners;
+    const streamSuffix = (totalStreams && totalStreams > kpis.currentListeners)
+      ? ` (${totalStreams} streams)`
+      : '';
+    document.getElementById('kpiUniqueIpsTag').textContent = `${kpis.uniqueIps} unique IPs${streamSuffix}`;
 
     const botFilterBadge = document.getElementById('kpiBotsFilterBadge');
     if (botFilterBadge) {
@@ -1442,16 +1462,20 @@
     let duplicateStreamsCount = 0;
 
     if (dedupeListenersSetting) {
-      const ipGroupMap = new Map();
+      const groupMap = new Map();
       for (const r of rows) {
-        if (!ipGroupMap.has(r.ip)) {
-          ipGroupMap.set(r.ip, {
+        // Group by (IP + Player / User-Agent):
+        // If listeners are on the same IP and player user agent, count as 1.
+        // Unless under the same IP there are two separate players or agents!
+        const key = getListenerDeviceKey(r);
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
             ...r,
             streams: [r],
             allClientIds: [String(r.clientId)],
           });
         } else {
-          const group = ipGroupMap.get(r.ip);
+          const group = groupMap.get(key);
           group.streams.push(r);
           group.allClientIds.push(String(r.clientId));
           duplicateStreamsCount++;
@@ -1468,7 +1492,7 @@
           group.connectionsFromIp = group.streams.length;
         }
       }
-      rows = Array.from(ipGroupMap.values());
+      rows = Array.from(groupMap.values());
     }
 
     rows.sort((a, b) => {
@@ -2289,19 +2313,20 @@
       showToast(`Polling interval updated to ${sec}s`);
     });
 
-    // Helper: deduplicate raw listeners array
+    // Helper: deduplicate raw listeners array by (IP + Player / User-Agent)
     function getDeduplicatedListeners(listeners) {
-      const ipMap = new Map();
+      const groupMap = new Map();
       for (const l of listeners || []) {
-        if (!ipMap.has(l.ip)) {
-          ipMap.set(l.ip, {
+        const key = getListenerDeviceKey(l);
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
             ...l,
             streams: [l],
             allClientIds: [String(l.clientId)],
             connectionsFromIp: l.connectionsFromIp || 1,
           });
         } else {
-          const group = ipMap.get(l.ip);
+          const group = groupMap.get(key);
           group.streams.push(l);
           group.allClientIds.push(String(l.clientId));
           if ((l.connectedSeconds || 0) > (group.connectedSeconds || 0)) {
@@ -2315,7 +2340,7 @@
           group.connectionsFromIp = group.streams.length;
         }
       }
-      return Array.from(ipMap.values());
+      return Array.from(groupMap.values());
     }
 
     // Export CSV & JSON

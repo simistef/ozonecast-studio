@@ -24,7 +24,7 @@ const {
   getDetractorSongs,
   getDetractorSummary,
 } = require('./src/db');
-const { parseUserAgent, parseIcecastClientsPayload } = require('./src/parser');
+const { parseUserAgent, parseIcecastClientsPayload, deduplicateListenersByDevice } = require('./src/parser');
 const { lookupIp, resolveIpHighAccuracy } = require('./src/geoip');
 const { stepSimulation, kickSimulatedClient } = require('./src/simulator');
 const { fetchLiveIcecastTelemetry, kickLiveIcecastClient } = require('./src/icecastClient');
@@ -431,7 +431,13 @@ app.get('/api/dashboard', async (req, res) => {
   const botListeners = allListeners.filter(l => l.isBot);
   const effectiveListeners = excludeBots ? humanListeners : allListeners;
 
-  const breakdownsLive = computeBreakdowns(effectiveListeners);
+  // Deduplicate listeners by device/player:
+  // Same IP and player/user-agent count as 1 listener,
+  // unless under the same IP there are two separate players or agents.
+  const deduplicatedEffective = deduplicateListenersByDevice(effectiveListeners);
+  const deduplicatedHuman = deduplicateListenersByDevice(humanListeners);
+
+  const breakdownsLive = computeBreakdowns(deduplicatedEffective);
   const breakdowns24h = getHistoricalBreakdowns(1440, modeForHistory, excludeBots);
   const breakdowns7d = getHistoricalBreakdowns(10080, modeForHistory, excludeBots);
   const breakdownsAll = getHistoricalBreakdowns(0, modeForHistory, excludeBots);
@@ -439,7 +445,7 @@ app.get('/api/dashboard', async (req, res) => {
   const breakdownsByPeriod = {
     live: {
       ...breakdownsLive,
-      mapLocations: effectiveListeners.map(l => ({
+      mapLocations: deduplicatedEffective.map(l => ({
         ip: l.ip,
         lat: l.geo?.lat,
         lon: l.geo?.lon,
@@ -451,6 +457,7 @@ app.get('/api/dashboard', async (req, res) => {
         os: l.ua?.os,
         connectedSeconds: l.connectedSeconds,
         isBot: l.isBot,
+        activeStreams: l.streamCount || 1,
       })),
       detractorSongs: breakdowns24h.detractorSongs,
       detractorSummary: breakdowns24h.detractorSummary,
@@ -491,23 +498,25 @@ app.get('/api/dashboard', async (req, res) => {
     },
     stream: latestState.sourceMeta,
     kpis: {
-      currentListeners: effectiveListeners.length,
+      currentListeners: deduplicatedEffective.length,
       totalListenersRaw: allListeners.length,
-      humanListenersCount: humanListeners.length,
+      humanListenersCount: deduplicatedHuman.length,
+      humanStreamsCount: humanListeners.length,
+      totalStreams: effectiveListeners.length,
       botListenersCount: botListeners.length,
       excludeBots,
-      reportedListeners: excludeBots ? humanListeners.length : latestState.reportedCount,
+      reportedListeners: excludeBots ? deduplicatedHuman.length : latestState.reportedCount,
       uniqueIps: breakdownsLive.uniqueIps,
-      duplicateConnections: breakdownsLive.duplicateConnections,
+      duplicateConnections: effectiveListeners.length - deduplicatedEffective.length,
       avgSessionDurationSec: breakdownsLive.avgSessionDurationSec,
       medianSessionDurationSec: breakdownsLive.medianSessionDurationSec,
       p90SessionDurationSec: breakdownsLive.p90SessionDurationSec,
       longestSessionSec: breakdownsLive.longestSessionSec,
       shortestSessionSec: breakdownsLive.shortestSessionSec,
       totalActiveListeningHours: breakdownsLive.totalActiveListeningHours,
-      peak24h: Math.max(stats24h.peak24h, effectiveListeners.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
+      peak24h: Math.max(stats24h.peak24h, deduplicatedEffective.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
       peak24hTs: stats24h.peak24hTs,
-      allTimePeak: Math.max(stats24h.allTimePeak, effectiveListeners.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
+      allTimePeak: Math.max(stats24h.allTimePeak, deduplicatedEffective.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
       totalSessions24h: stats24h.totalSessions24h,
       uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdownsLive.uniqueIps),
       uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdownsLive.countries.length),
