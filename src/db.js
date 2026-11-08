@@ -498,86 +498,261 @@ function getHistoricalTrackChanges(rangeMinutes = 60, sourceMode = null) {
  * so the station owner can see when listeners usually tune in across the day,
  * plus daypart averages (Morning Drive, Midday Work, Evening Prime, Late Night).
  */
-function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false) {
-  const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
+/**
+ * Computes 24-Hour Time-of-Day Listener Profile (00:00 to 23:00)
+ * so the station owner can see when listeners usually tune in across the day,
+ * per day of the week (All Days, Weekdays, Weekend, Mon–Sun),
+ * plus daypart averages (Morning Drive, Midday Work, Evening Prime, Late Night).
+ */
+function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter = 'all') {
+  const historyWindowMs = 14 * 24 * 3600 * 1000;
+  const since = Date.now() - historyWindowMs;
   const countCol = excludeBots ? 'COALESCE(human_count, listener_count)' : 'listener_count';
   const ipCol = excludeBots ? 'COALESCE(human_unique_ips, unique_ips)' : 'unique_ips';
 
-  const rows = db
-    .prepare(`SELECT ts, ${countCol} as listener_count, ${ipCol} as unique_ips FROM snapshots WHERE ts >= ? AND source_mode = ?`)
-    .all(sevenDaysAgo, sourceMode);
+  let rows;
+  if (sourceMode) {
+    rows = db
+      .prepare(`SELECT ts, ${countCol} as listener_count, ${ipCol} as unique_ips FROM snapshots WHERE ts >= ? AND source_mode = ?`)
+      .all(since, sourceMode);
+  } else {
+    rows = db
+      .prepare(`SELECT ts, ${countCol} as listener_count, ${ipCol} as unique_ips FROM snapshots WHERE ts >= ?`)
+      .all(since);
+  }
 
-  const buckets = Array.from({ length: 24 }, (_, hour) => {
-    let daypart = 'Late Night';
-    if (hour >= 6 && hour < 11) daypart = 'Morning Drive';
-    else if (hour >= 11 && hour < 17) daypart = 'Midday / Work';
-    else if (hour >= 17 && hour < 23) daypart = 'Evening Prime';
+  const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const DAY_DEFS = [
+    { key: 'mon', name: 'Monday', shortName: 'Mon', dayIndex: 1 },
+    { key: 'tue', name: 'Tuesday', shortName: 'Tue', dayIndex: 2 },
+    { key: 'wed', name: 'Wednesday', shortName: 'Wed', dayIndex: 3 },
+    { key: 'thu', name: 'Thursday', shortName: 'Thu', dayIndex: 4 },
+    { key: 'fri', name: 'Friday', shortName: 'Fri', dayIndex: 5 },
+    { key: 'sat', name: 'Saturday', shortName: 'Sat', dayIndex: 6 },
+    { key: 'sun', name: 'Sunday', shortName: 'Sun', dayIndex: 0 },
+  ];
 
-    return {
-      hour,
-      label: `${String(hour).padStart(2, '0')}:00`,
-      daypart,
-      sumListeners: 0,
-      maxListeners: 0,
-      samples: 0,
-    };
-  });
+  const profileKeys = ['all', 'weekdays', 'weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+  function createBuckets() {
+    return Array.from({ length: 24 }, (_, hour) => {
+      let daypart = 'Late Night';
+      if (hour >= 6 && hour < 11) daypart = 'Morning Drive';
+      else if (hour >= 11 && hour < 17) daypart = 'Midday / Work';
+      else if (hour >= 17 && hour < 23) daypart = 'Evening Prime';
+
+      return {
+        hour,
+        label: `${String(hour).padStart(2, '0')}:00`,
+        daypart,
+        sumListeners: 0,
+        maxListeners: 0,
+        samples: 0,
+      };
+    });
+  }
+
+  const bucketMap = {};
+  for (const k of profileKeys) {
+    bucketMap[k] = createBuckets();
+  }
 
   for (const r of rows) {
     const d = new Date(r.ts);
     const h = d.getHours();
-    const b = buckets[h];
-    if (b) {
-      b.sumListeners += r.listener_count || 0;
-      if ((r.listener_count || 0) > b.maxListeners) {
-        b.maxListeners = r.listener_count;
+    const dayIdx = d.getDay();
+    const dayKey = DAY_KEYS[dayIdx];
+    const count = r.listener_count || 0;
+
+    const record = (bList) => {
+      const b = bList[h];
+      if (b) {
+        b.sumListeners += count;
+        if (count > b.maxListeners) {
+          b.maxListeners = count;
+        }
+        b.samples++;
       }
-      b.samples++;
+    };
+
+    record(bucketMap.all);
+    if (dayIdx >= 1 && dayIdx <= 5) {
+      record(bucketMap.weekdays);
+    } else {
+      record(bucketMap.weekend);
+    }
+    if (bucketMap[dayKey]) {
+      record(bucketMap[dayKey]);
     }
   }
 
-  const hourly = buckets.map(b => ({
-    hour: b.hour,
-    label: b.label,
-    daypart: b.daypart,
-    avgListeners: b.samples > 0 ? Math.round(b.sumListeners / b.samples) : 0,
-    peakListeners: b.maxListeners,
-    samples: b.samples,
-  }));
+  // Collect session duration stats per day
+  const sessionDurations = {};
+  for (const k of profileKeys) {
+    sessionDurations[k] = [];
+  }
 
-  // Compute daypart summaries
-  const dayparts = [
-    { id: 'morning', name: 'Morning Drive', hours: '06:00 – 11:00', filter: h => h >= 6 && h < 11 },
-    { id: 'midday', name: 'Midday / Workday', hours: '11:00 – 17:00', filter: h => h >= 11 && h < 17 },
-    { id: 'evening', name: 'Evening Prime Time', hours: '17:00 – 23:00', filter: h => h >= 17 && h < 23 },
-    { id: 'night', name: 'Late Night / Overnight', hours: '23:00 – 06:00', filter: h => h >= 23 || h < 6 },
-  ].map(dp => {
-    const matching = hourly.filter(h => dp.filter(h.hour) && h.samples > 0);
-    const avg = matching.length > 0
-      ? Math.round(matching.reduce((s, x) => s + x.avgListeners, 0) / matching.length)
-      : 0;
-    const peak = matching.length > 0
-      ? Math.max(...matching.map(x => x.peakListeners))
-      : 0;
+  try {
+    let sessionQuery = `
+      SELECT last_seen, duration_seconds
+      FROM listener_sessions
+      WHERE last_seen >= ?
+    `;
+    const params = [since];
+    if (sourceMode) {
+      sessionQuery += ' AND source_mode = ?';
+      params.push(sourceMode);
+    }
+    if (excludeBots) {
+      sessionQuery += `
+        AND category != 'Bot / Ripper'
+        AND ip NOT IN (SELECT ip FROM bot_ips)
+        AND LOWER(user_agent) NOT LIKE '%bot%'
+        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(user_agent) NOT LIKE '%crawler%'
+        AND LOWER(user_agent) NOT LIKE '%spider%'
+        AND LOWER(user_agent) NOT LIKE '%streamripper%'
+      `;
+    }
+    const sRows = db.prepare(sessionQuery).all(...params);
+    for (const s of sRows) {
+      const dur = s.duration_seconds || 0;
+      const d = new Date(s.last_seen);
+      const dayIdx = d.getDay();
+      const dayKey = DAY_KEYS[dayIdx];
+
+      sessionDurations.all.push(dur);
+      if (dayIdx >= 1 && dayIdx <= 5) {
+        sessionDurations.weekdays.push(dur);
+      } else {
+        sessionDurations.weekend.push(dur);
+      }
+      if (sessionDurations[dayKey]) {
+        sessionDurations[dayKey].push(dur);
+      }
+    }
+  } catch (err) {
+    console.warn('Error querying session durations for time-of-day profile:', err.message);
+  }
+
+  function computeDurationMetrics(durations) {
+    if (!durations || durations.length === 0) {
+      return {
+        avgSessionDurationSec: 0,
+        medianSessionDurationSec: 0,
+        p90SessionDurationSec: 0,
+        longestSessionSec: 0,
+        sessionCount: 0,
+      };
+    }
+    const sorted = [...durations].sort((a, b) => a - b);
+    const total = sorted.reduce((sum, v) => sum + v, 0);
     return {
-      id: dp.id,
-      name: dp.name,
-      hours: dp.hours,
-      avgListeners: avg,
-      peakListeners: peak,
+      avgSessionDurationSec: Math.round(total / sorted.length),
+      medianSessionDurationSec: sorted[Math.floor(sorted.length / 2)] || 0,
+      p90SessionDurationSec: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))] || 0,
+      longestSessionSec: sorted[sorted.length - 1] || 0,
+      sessionCount: sorted.length,
+    };
+  }
+
+  // Build each profile
+  const profiles = {};
+  for (const k of profileKeys) {
+    const buckets = bucketMap[k];
+    const hourly = buckets.map(b => ({
+      hour: b.hour,
+      label: b.label,
+      daypart: b.daypart,
+      avgListeners: b.samples > 0 ? Math.round(b.sumListeners / b.samples) : 0,
+      peakListeners: b.maxListeners,
+      samples: b.samples,
+    }));
+
+    const dayparts = [
+      { id: 'morning', name: 'Morning Drive', hours: '06:00 – 11:00', filter: h => h >= 6 && h < 11 },
+      { id: 'midday', name: 'Midday / Workday', hours: '11:00 – 17:00', filter: h => h >= 11 && h < 17 },
+      { id: 'evening', name: 'Evening Prime Time', hours: '17:00 – 23:00', filter: h => h >= 17 && h < 23 },
+      { id: 'night', name: 'Late Night / Overnight', hours: '23:00 – 06:00', filter: h => h >= 23 || h < 6 },
+    ].map(dp => {
+      const matching = hourly.filter(h => dp.filter(h.hour) && h.samples > 0);
+      const avg = matching.length > 0
+        ? Math.round(matching.reduce((s, x) => s + x.avgListeners, 0) / matching.length)
+        : 0;
+      const peak = matching.length > 0
+        ? Math.max(...matching.map(x => x.peakListeners))
+        : 0;
+      return {
+        id: dp.id,
+        name: dp.name,
+        hours: dp.hours,
+        avgListeners: avg,
+        peakListeners: peak,
+      };
+    });
+
+    const bestHour = [...hourly].sort((a, b) => b.avgListeners - a.avgListeners || b.peakListeners - a.peakListeners)[0] || hourly[20];
+    const bestDaypart = [...dayparts].sort((a, b) => b.avgListeners - a.avgListeners)[0] || dayparts[2];
+    const totalSamples = hourly.reduce((sum, h) => sum + h.samples, 0);
+    const totalSum = hourly.reduce((sum, h) => sum + (h.samples * h.avgListeners), 0);
+    const overallAvg = totalSamples > 0 ? Math.round(totalSum / totalSamples) : 0;
+    const overallPeak = Math.max(0, ...hourly.map(h => h.peakListeners));
+    const connectedTime = computeDurationMetrics(sessionDurations[k]);
+
+    profiles[k] = {
+      hourly,
+      dayparts,
+      bestHourLabel: bestHour ? `${bestHour.label} – ${String((bestHour.hour + 1) % 24).padStart(2, '0')}:00` : '20:00 – 21:00',
+      bestHourAvg: bestHour?.avgListeners || 0,
+      bestHourPeak: bestHour?.peakListeners || 0,
+      bestDaypartName: bestDaypart?.name || 'Evening Prime Time',
+      overallAvg,
+      overallPeak,
+      totalSamples,
+      connectedTime,
+    };
+  }
+
+  const todayDayIndex = new Date().getDay();
+  const daysOfWeek = DAY_DEFS.map(d => {
+    const p = profiles[d.key];
+    return {
+      key: d.key,
+      name: d.name,
+      shortName: d.shortName,
+      dayIndex: d.dayIndex,
+      isToday: d.dayIndex === todayDayIndex,
+      avgListeners: p.overallAvg,
+      peakListeners: p.overallPeak,
+      bestHourLabel: p.bestHourLabel,
+      bestHourAvg: p.bestHourAvg,
+      bestDaypartName: p.bestDaypartName,
+      samples: p.totalSamples,
     };
   });
 
-  const bestHour = [...hourly].sort((a, b) => b.avgListeners - a.avgListeners || b.peakListeners - a.peakListeners)[0] || hourly[20];
-  const bestDaypart = [...dayparts].sort((a, b) => b.avgListeners - a.avgListeners)[0] || dayparts[2];
+  const sortedDays = [...daysOfWeek].filter(d => d.samples > 0).sort((a, b) => b.avgListeners - a.avgListeners || b.peakListeners - a.peakListeners);
+  const bestDay = sortedDays[0] || daysOfWeek[0];
+
+  const selectedKey = (dayFilter && profiles[dayFilter]) ? dayFilter : 'all';
+  const selectedProfile = profiles[selectedKey] || profiles.all;
 
   return {
-    hourly,
-    dayparts,
-    bestHourLabel: bestHour ? `${bestHour.label} – ${String((bestHour.hour + 1) % 24).padStart(2, '0')}:00` : '20:00 – 21:00',
-    bestHourAvg: bestHour?.avgListeners || 0,
-    bestHourPeak: bestHour?.peakListeners || 0,
-    bestDaypartName: bestDaypart?.name || 'Evening Prime Time',
+    hourly: selectedProfile.hourly,
+    dayparts: selectedProfile.dayparts,
+    bestHourLabel: selectedProfile.bestHourLabel,
+    bestHourAvg: selectedProfile.bestHourAvg,
+    bestHourPeak: selectedProfile.bestHourPeak,
+    bestDaypartName: selectedProfile.bestDaypartName,
+    overallAvg: selectedProfile.overallAvg,
+    overallPeak: selectedProfile.overallPeak,
+    connectedTime: selectedProfile.connectedTime,
+    activeDay: selectedKey,
+    profiles,
+    daysOfWeek,
+    bestDayName: bestDay ? bestDay.name : 'All Days',
+    bestDayKey: bestDay ? bestDay.key : 'all',
+    bestDayAvg: bestDay ? bestDay.avgListeners : 0,
   };
 }
 

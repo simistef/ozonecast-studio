@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=13" />
+  <link rel="stylesheet" href="/index.css?v=14" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -403,20 +403,40 @@
 
     <!-- Row 2.5: 24-Hour Time-of-Day Listener Schedule + Top 5 Returning Listeners Leaderboard -->
     <section class="row-split" aria-label="Time of day schedule and Top 5 returning listeners">
-      <div class="panel">
+      <div class="panel" id="timeOfDayPanel">
         <div class="panel-header">
           <div class="panel-title-group">
             <h2>
               <span>Time-of-Day Audience Profile (00:00 – 23:00) &amp; Connected Time</span>
-              <span class="time-bound-badge time-7d" title="Computed from SQLite snapshots over rolling 7 days">📅 7-Day Rolling Average</span>
+              <span id="timeOfDayScopeBadge" class="time-bound-badge time-7d" title="Computed from SQLite snapshots">📅 7-Day Rolling Average</span>
             </h2>
-            <div class="panel-subtitle">When listeners usually tune in across the day (7-day hourly averages &amp; dayparts from SQLite)</div>
+            <div class="panel-subtitle" id="timeOfDaySubtitle">When listeners usually tune in across the day (7-day hourly averages &amp; dayparts from SQLite)</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span id="bestHourTag" class="mount-tag">Peak Hour: --:--</span>
           </div>
         </div>
-        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:12px">
+          <!-- Day of Week Selector Bar -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <div class="segmented-tabs" id="timeOfDayDayTabs" role="tablist" aria-label="Filter audience profile by day of week" style="flex-wrap:wrap">
+              <button class="seg-btn active" data-day="all" title="7-Day overall rolling average across all days">All Week</button>
+              <button class="seg-btn" data-day="weekdays" title="Weekdays (Monday through Friday average)">Weekdays</button>
+              <button class="seg-btn" data-day="weekend" title="Weekend (Saturday &amp; Sunday average)">Weekend</button>
+              <button class="seg-btn" data-day="mon" title="Monday hourly profile">Mon</button>
+              <button class="seg-btn" data-day="tue" title="Tuesday hourly profile">Tue</button>
+              <button class="seg-btn" data-day="wed" title="Wednesday hourly profile">Wed</button>
+              <button class="seg-btn" data-day="thu" title="Thursday hourly profile">Thu</button>
+              <button class="seg-btn" data-day="fri" title="Friday hourly profile">Fri</button>
+              <button class="seg-btn" data-day="sat" title="Saturday hourly profile">Sat</button>
+              <button class="seg-btn" data-day="sun" title="Sunday hourly profile">Sun</button>
+            </div>
+            <span id="activeDaySummaryTag" class="mount-tag" style="background:hsla(28,95%,56%,0.12);color:var(--accent-amber);border-color:hsla(28,95%,56%,0.3);font-size:11px">7-Day Combined</span>
+          </div>
+
+          <!-- Day of Week 7-Day Performance Strip -->
+          <div id="dayOfWeekOverviewStrip"></div>
+
           <div class="time-of-day-chart-wrap">
             <canvas id="timeOfDayCanvas"></canvas>
           </div>
@@ -671,7 +691,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=13"></script>
-  <script src="/app.js?v=13"></script>
+  <script src="/world-map.js?v=14"></script>
+  <script src="/app.js?v=14"></script>
 </body>
 </html>

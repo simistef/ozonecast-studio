@@ -8,6 +8,7 @@
   let geoTabMode = 'countries'; // 'countries' | 'cities'
   let rightMidTabMode = 'retention'; // 'retention' | 'events'
   let breakdownScopeMode = localStorage.getItem('ozonecast_breakdown_scope') || 'live'; // 'live' | '24h' | '7d' | 'all'
+  let timeOfDayDayMode = localStorage.getItem('ozonecast_time_of_day_day') || 'all'; // 'all' | 'weekdays' | 'weekend' | 'mon' | 'tue' | ...
   let tableSearchQuery = '';
   let tableCategoryFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
@@ -384,12 +385,87 @@
 
   function renderTimeOfDayAndConnectedStats(timeOfDay, kpis) {
     if (!timeOfDay) return;
-    const bestTag = document.getElementById('bestHourTag');
-    if (bestTag) {
-      bestTag.textContent = `Peak Hour: ${timeOfDay.bestHourLabel} (avg ${timeOfDay.bestHourAvg})`;
+
+    // Resolve the active profile based on timeOfDayDayMode
+    const activeKey = (timeOfDay.profiles && timeOfDay.profiles[timeOfDayDayMode]) ? timeOfDayDayMode : 'all';
+    const profile = (timeOfDay.profiles && timeOfDay.profiles[activeKey]) ? timeOfDay.profiles[activeKey] : timeOfDay;
+
+    // 1. Update Scope Badge, Subtitle & Summary Tag
+    const scopeBadge = document.getElementById('timeOfDayScopeBadge');
+    const subtitleEl = document.getElementById('timeOfDaySubtitle');
+    const summaryTag = document.getElementById('activeDaySummaryTag');
+
+    const dayMeta = {
+      all: { badge: '📅 7-Day Rolling Average', sub: 'When listeners usually tune in across the day (7-day hourly averages & dayparts from SQLite)', tag: '7-Day Combined' },
+      weekdays: { badge: '📅 Weekdays Average (Mon–Fri)', sub: 'Audience listening curve and dayparts averaged across Monday through Friday', tag: 'Mon–Fri Weekdays' },
+      weekend: { badge: '📅 Weekend Average (Sat–Sun)', sub: 'Audience listening curve and dayparts averaged across Saturday and Sunday', tag: 'Sat–Sun Weekend' },
+      mon: { badge: '📅 Monday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Mondays', tag: 'Monday' },
+      tue: { badge: '📅 Tuesday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Tuesdays', tag: 'Tuesday' },
+      wed: { badge: '📅 Wednesday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Wednesdays', tag: 'Wednesday' },
+      thu: { badge: '📅 Thursday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Thursdays', tag: 'Thursday' },
+      fri: { badge: '📅 Friday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Fridays', tag: 'Friday' },
+      sat: { badge: '📅 Saturday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Saturdays', tag: 'Saturday' },
+      sun: { badge: '📅 Sunday Audience Profile', sub: 'Hourly listening curve and daypart breakdown for Sundays', tag: 'Sunday' },
+    };
+
+    const cfg = dayMeta[activeKey] || dayMeta.all;
+    if (scopeBadge) {
+      scopeBadge.textContent = cfg.badge;
+      scopeBadge.className = activeKey === 'all' ? 'time-bound-badge time-7d' : 'time-bound-badge time-24h';
+    }
+    if (subtitleEl) {
+      subtitleEl.textContent = cfg.sub;
+    }
+    if (summaryTag) {
+      const avg = Number(profile.overallAvg) || 0;
+      const peak = Number(profile.overallPeak) || 0;
+      summaryTag.textContent = avg > 0
+        ? `${cfg.tag} • Avg ${avg} (Peak ${peak})`
+        : cfg.tag;
     }
 
-    // Render 24-hour bar chart on #timeOfDayCanvas
+    // 2. Update Peak Hour Tag
+    const bestTag = document.getElementById('bestHourTag');
+    if (bestTag) {
+      bestTag.textContent = profile.bestHourAvg > 0
+        ? `Peak Hour: ${profile.bestHourLabel} (avg ${profile.bestHourAvg})`
+        : `Peak Hour: ${profile.bestHourLabel}`;
+    }
+
+    // 3. Render 7-Day Performance Cards Strip
+    const dowStrip = document.getElementById('dayOfWeekOverviewStrip');
+    if (dowStrip && Array.isArray(timeOfDay.daysOfWeek)) {
+      dowStrip.innerHTML = timeOfDay.daysOfWeek
+        .map(d => {
+          const isSelected = activeKey === d.key;
+          const todayDot = d.isToday ? '<span class="dow-card-today" title="Today"></span>' : '';
+          const todayText = d.isToday ? ' <span style="font-size:9.5px;color:var(--accent-emerald)">(Today)</span>' : '';
+          return `
+            <div class="dow-card ${isSelected ? 'active' : ''}" data-select-day="${d.key}" title="Click to view ${d.name}'s hourly profile &amp; dayparts">
+              <div class="dow-card-header">
+                <span>${d.shortName}${todayText}</span>
+                ${todayDot}
+              </div>
+              <div class="dow-card-metrics">
+                <span style="color:var(--accent-amber)">avg ${d.avgListeners}</span>
+                <span class="dow-card-sub">pk ${d.peakListeners}</span>
+              </div>
+              <div class="dow-card-sub" title="${d.bestHourLabel}">
+                ${d.bestHourAvg > 0 ? `🔥 ${d.bestHourLabel.split(' – ')[0]}` : '💤 Quiet'}
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    // 4. Update Segmented Day Tabs active class
+    document.querySelectorAll('#timeOfDayDayTabs .seg-btn').forEach(btn => {
+      const day = btn.getAttribute('data-day');
+      btn.classList.toggle('active', day === activeKey);
+    });
+
+    // 5. Render 24-hour bar chart on #timeOfDayCanvas
     const canvas = document.getElementById('timeOfDayCanvas');
     if (canvas) {
       const ctx = canvas.getContext('2d');
@@ -406,7 +482,7 @@
 
       ctx.clearRect(0, 0, w, h);
 
-      const hourly = timeOfDay.hourly || [];
+      const hourly = profile.hourly || [];
       const padL = 36;
       const padR = 14;
       const padT = 16;
@@ -445,7 +521,7 @@
         const avg = Number(b.avgListeners) || 0;
         const peak = Number(b.peakListeners) || 0;
         const isCurrent = idx === currentHour;
-        const isPeakHour = avg === timeOfDay.bestHourAvg && avg > 0;
+        const isPeakHour = avg === profile.bestHourAvg && avg > 0;
 
         // Background slot track so every hour slot is clearly visible
         ctx.fillStyle = isCurrent ? 'hsla(152, 76%, 46%, 0.12)' : 'hsla(210, 20%, 90%, 0.035)';
@@ -511,10 +587,10 @@
       });
     }
 
-    // Render 4 Daypart cards
+    // 6. Render 4 Daypart cards
     const dpGrid = document.getElementById('daypartSummaryGrid');
-    if (dpGrid && Array.isArray(timeOfDay.dayparts)) {
-      dpGrid.innerHTML = timeOfDay.dayparts
+    if (dpGrid && Array.isArray(profile.dayparts)) {
+      dpGrid.innerHTML = profile.dayparts
         .map(
           dp => `
           <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:8px 10px">
@@ -529,25 +605,29 @@
         .join('');
     }
 
-    // Render Connected Time Stats Strip (Mean, Median, P90, Longest)
+    // 7. Render Connected Time Stats Strip (Mean, Median, P90, Longest)
     const ctStrip = document.getElementById('connectedTimeStatsStrip');
-    if (ctStrip && kpis) {
+    if (ctStrip) {
+      const stats = (profile.connectedTime && profile.connectedTime.sessionCount > 0)
+        ? profile.connectedTime
+        : kpis || {};
+
       ctStrip.innerHTML = `
         <div>
           <div style="font-size:11px;color:var(--text-muted)">MEAN CONNECTED TIME</div>
-          <div class="mono" style="font-size:14px;font-weight:700;color:var(--accent-emerald)">${formatDurationHuman(kpis.avgSessionDurationSec)}</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:var(--accent-emerald)">${formatDurationHuman(stats.avgSessionDurationSec || 0)}</div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--text-muted)">MEDIAN SESSION</div>
-          <div class="mono" style="font-size:14px;font-weight:700">${formatDurationHuman(kpis.medianSessionDurationSec || kpis.avgSessionDurationSec)}</div>
+          <div class="mono" style="font-size:14px;font-weight:700">${formatDurationHuman(stats.medianSessionDurationSec || stats.avgSessionDurationSec || 0)}</div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--text-muted)">90TH PERCENTILE</div>
-          <div class="mono" style="font-size:14px;font-weight:700;color:var(--accent-cyan)">${formatDurationHuman(kpis.p90SessionDurationSec || kpis.longestSessionSec)}</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:var(--accent-cyan)">${formatDurationHuman(stats.p90SessionDurationSec || stats.longestSessionSec || 0)}</div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--text-muted)">LONGEST SESSION</div>
-          <div class="mono" style="font-size:14px;font-weight:700;color:var(--accent-amber)">${formatDurationHuman(kpis.longestSessionSec)}</div>
+          <div class="mono" style="font-size:14px;font-weight:700;color:var(--accent-amber)">${formatDurationHuman(stats.longestSessionSec || 0)}</div>
         </div>
       `;
     }
@@ -1987,6 +2067,54 @@
         };
         showToast(`Detractor songs scope: ${scopeNames[scope] || scope}`);
       });
+    });
+
+    // Time-of-Day Audience Profile Day of Week Tabs
+    document.querySelectorAll('#timeOfDayDayTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const day = btn.getAttribute('data-day') || 'all';
+        timeOfDayDayMode = day;
+        localStorage.setItem('ozonecast_time_of_day_day', day);
+        if (dashboardState) {
+          renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, dashboardState.kpis);
+        }
+        const dayLabels = {
+          all: 'All Week (7-Day Average)',
+          weekdays: 'Weekdays (Mon–Fri Average)',
+          weekend: 'Weekend (Sat–Sun Average)',
+          mon: 'Monday Audience Schedule',
+          tue: 'Tuesday Audience Schedule',
+          wed: 'Wednesday Audience Schedule',
+          thu: 'Thursday Audience Schedule',
+          fri: 'Friday Audience Schedule',
+          sat: 'Saturday Audience Schedule',
+          sun: 'Sunday Audience Schedule',
+        };
+        showToast(`Audience schedule: ${dayLabels[day] || day}`);
+      });
+    });
+
+    // Day of Week Mini Performance Strip click delegation
+    document.getElementById('dayOfWeekOverviewStrip')?.addEventListener('click', e => {
+      const card = e.target.closest('[data-select-day]');
+      if (!card) return;
+      const day = card.getAttribute('data-select-day');
+      if (!day) return;
+      timeOfDayDayMode = day;
+      localStorage.setItem('ozonecast_time_of_day_day', day);
+      if (dashboardState) {
+        renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, dashboardState.kpis);
+      }
+      const dayLabels = {
+        mon: 'Monday',
+        tue: 'Tuesday',
+        wed: 'Wednesday',
+        thu: 'Thursday',
+        fri: 'Friday',
+        sat: 'Saturday',
+        sun: 'Sunday',
+      };
+      showToast(`Showing hourly curve & dayparts for ${dayLabels[day] || day}`);
     });
 
     // Geo Breakdown Tabs

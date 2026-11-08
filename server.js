@@ -558,6 +558,15 @@ app.get('/api/detractor-songs', (req, res) => {
   res.json({ ok: true, rangeMinutes, excludeBots, songs, summary });
 });
 
+// API: Time-of-Day Audience Profile & Day-of-Week Breakdown
+app.get('/api/time-of-day', (req, res) => {
+  const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
+  const day = req.query.day || 'all';
+  const mode = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
+  const profile = getTimeOfDayProfile(mode, excludeBots, day);
+  res.json({ ok: true, excludeBots, activeDay: day, profile });
+});
+
 // API: Force immediate poll
 app.post('/api/poll', async (req, res) => {
   await executePollCycle(Boolean(req.body?.forceLive));

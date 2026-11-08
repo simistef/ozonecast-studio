@@ -834,6 +834,84 @@ button, input, select, textarea {
   min-height: 185px;
 }
 
+/* Day of Week Mini Performance Cards */
+#dayOfWeekOverviewStrip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 680px) {
+  #dayOfWeekOverviewStrip {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.dow-card {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  user-select: none;
+}
+
+.dow-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-elevated);
+}
+
+.dow-card.active {
+  border-color: var(--accent-amber);
+  background: hsla(28, 95%, 56%, 0.12);
+  box-shadow: 0 0 0 1px hsla(28, 95%, 56%, 0.25);
+}
+
+.dow-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.dow-card.active .dow-card-header {
+  color: var(--accent-amber);
+}
+
+.dow-card-today {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-emerald);
+  box-shadow: 0 0 4px var(--accent-emerald);
+}
+
+.dow-card-metrics {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 2px;
+}
+
+.dow-card-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #historyChartCanvas,
 #timeOfDayCanvas {
   width: 100% !important;
