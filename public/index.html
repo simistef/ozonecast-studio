@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=6" />
+  <link rel="stylesheet" href="/index.css?v=7" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar -->
@@ -126,7 +126,10 @@
     <section class="kpi-grid" aria-label="Key station metrics">
       <article class="kpi-card">
         <div class="kpi-header">
-          <span>CONCURRENT LISTENERS</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span>CONCURRENT LISTENERS</span>
+            <span class="time-bound-badge live" title="Real-time live connections currently streaming">Live Now</span>
+          </div>
           <div style="display:flex;align-items:center;gap:6px">
             <span id="kpiBotsFilterBadge" class="kpi-subtag warning hidden" title="Flagged bots and stream rippers excluded from statistics">🤖 Filtered</span>
             <span id="capacityPctBadge" class="kpi-subtag emerald">0% cap</span>
@@ -149,8 +152,11 @@
 
       <article class="kpi-card">
         <div class="kpi-header">
-          <span>PEAK LISTENERS (24H)</span>
-          <span id="kpiAllTimePeakBadge" class="kpi-subtag amber">All-Time: 0</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span>PEAK LISTENERS</span>
+            <span class="time-bound-badge time-24h" title="Rolling peak concurrency over the last 24 hours">24h Peak</span>
+          </div>
+          <span id="kpiAllTimePeakBadge" class="time-bound-badge alltime" title="Highest listener concurrency ever recorded in SQLite history">All-Time: 0</span>
         </div>
         <div class="kpi-value-row">
           <div id="kpiPeak24h" class="kpi-number">0</div>
@@ -164,7 +170,10 @@
 
       <article class="kpi-card">
         <div class="kpi-header">
-          <span>AVG TUNE-IN DURATION</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span>AVG TUNE-IN DURATION</span>
+            <span class="time-bound-badge live" id="kpiAvgDurationScopeBadge" title="Average duration of currently active live listeners">Live Active</span>
+          </div>
           <span id="kpiLongestTag" class="kpi-subtag cyan">Max: 0m</span>
         </div>
         <div class="kpi-value-row">
@@ -172,14 +181,17 @@
           <div id="kpiTlhBadge" class="kpi-subtag emerald">0.0 TLH</div>
         </div>
         <div class="kpi-footer">
-          <span>Active TLH: <strong id="kpiActiveTlh" class="mono">0.00 hrs</strong></span>
-          <span>24h Total: <strong id="kpi24hTlh" class="mono">0.00 hrs</strong></span>
+          <span>Active TLH (Live): <strong id="kpiActiveTlh" class="mono">0.00 hrs</strong></span>
+          <span>24h Total TLH: <strong id="kpi24hTlh" class="mono">0.00 hrs</strong></span>
         </div>
       </article>
 
       <article class="kpi-card">
         <div class="kpi-header">
-          <span>GEOGRAPHIC REACH &amp; SESSIONS</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span>GEOGRAPHIC REACH &amp; SESSIONS</span>
+            <span class="time-bound-badge live" id="kpiGeoScopeBadge" title="Unique countries currently tuned in live">Live Now</span>
+          </div>
           <span id="kpiDupConnectionsTag" class="kpi-subtag">0 multi-stream IPs</span>
         </div>
         <div class="kpi-value-row">
@@ -199,10 +211,11 @@
         <div class="panel-title-group">
           <h2>
             <span>Connected Clients — Private Admin Console</span>
+            <span class="time-bound-badge live" title="Real-time active listener connections currently streaming">Live Clients</span>
             <span id="tableCountBadge" class="mount-tag">0 clients</span>
           </h2>
           <div class="panel-subtitle">
-            Live listener table for <span id="tableEndpointLabel" class="mono">https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen</span>
+            Live real-time listener table for <span id="tableEndpointLabel" class="mono">https://live.ozone.fm:8443/admin/listclients.xsl?mount=/listen</span>
           </div>
         </div>
 
@@ -256,6 +269,33 @@
       </div>
     </section>
 
+    <!-- Audience Breakdown Time Window Control Toolbar -->
+    <section class="breakdown-scope-strip" aria-label="Audience breakdown timeframe filter">
+      <div class="breakdown-scope-info">
+        <div class="breakdown-scope-title-row">
+          <span class="breakdown-scope-title">Audience Breakdown Scope</span>
+          <span id="breakdownActiveScopeBadge" class="time-bound-badge live">Live Active Connections</span>
+        </div>
+        <div class="breakdown-scope-subtitle">
+          Controls time window for Geolocation Map, Countries, Cities, Retention cohorts, Players, and Operating Systems
+        </div>
+      </div>
+      <div class="segmented-tabs" id="breakdownScopeTabs" role="tablist" aria-label="Audience breakdown time window">
+        <button class="seg-btn active" data-scope="live" title="Currently active streaming listeners">
+          <span class="scope-dot live"></span> Live Active
+        </button>
+        <button class="seg-btn" data-scope="24h" title="All listener sessions recorded in SQLite over the past 24 hours">
+          ⏱️ Past 24h
+        </button>
+        <button class="seg-btn" data-scope="7d" title="All listener sessions recorded in SQLite over the past 7 days">
+          📅 Past 7d
+        </button>
+        <button class="seg-btn" data-scope="all" title="All recorded listener sessions across entire SQLite station history">
+          🏆 All-Time
+        </button>
+      </div>
+    </section>
+
     <!-- Row 1: Interactive World Geolocation Map + Country / City Breakdown -->
     <section class="row-split">
       <div class="panel">
@@ -263,8 +303,9 @@
           <div class="panel-title-group">
             <h2>
               <span>Live Listener Geolocation Map</span>
+              <span id="mapTimeScopeBadge" class="time-bound-badge live">Live Now</span>
             </h2>
-            <div class="panel-subtitle">Real-time MaxMind GeoIP coordinate clustering across active connections</div>
+            <div class="panel-subtitle" id="mapSubtitle">Real-time MaxMind GeoIP coordinate clustering across active connections</div>
           </div>
           <div class="segmented-tabs" role="tablist" aria-label="Map region focus">
             <button class="seg-btn active" data-map-view="europe" id="mapViewEuropeBtn">Europe Focus</button>
@@ -288,8 +329,11 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Geographic Distribution</h2>
-            <div class="panel-subtitle">Listener share &amp; average session time by location</div>
+            <h2>
+              <span>Geographic Distribution</span>
+              <span id="geoTimeScopeBadge" class="time-bound-badge live">Live Active</span>
+            </h2>
+            <div class="panel-subtitle" id="geoSubtitle">Listener share &amp; average session time by location (Live active connections)</div>
           </div>
           <div class="segmented-tabs" role="tablist">
             <button class="seg-btn active" id="geoTabCountriesBtn">Countries</button>
@@ -309,6 +353,7 @@
           <div class="panel-title-group">
             <h2>
               <span>Historical Listener Trend &amp; Peak Curve</span>
+              <span id="historyTimeScopeBadge" class="time-bound-badge time-24h">⏱️ 1h Window</span>
               <span id="historyTrackCountBadge" class="mount-tag" style="background:hsla(280,75%,55%,0.15);color:hsl(280,95%,85%);border-color:hsla(280,80%,65%,0.35);font-size:11px">🎵 0 track changes</span>
             </h2>
             <div class="panel-subtitle">Time-series concurrency stored in local SQLite database with song changes</div>
@@ -339,7 +384,10 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2 id="rightMidPanelTitle">Listener Retention &amp; Tune-In Duration</h2>
+            <h2>
+              <span id="rightMidPanelTitle">Listener Retention &amp; Tune-In Duration</span>
+              <span id="retentionTimeScopeBadge" class="time-bound-badge live">Live Cohort</span>
+            </h2>
             <div class="panel-subtitle" id="rightMidPanelSub">Distribution of active listener loyalty cohorts</div>
           </div>
           <div class="segmented-tabs">
@@ -359,8 +407,11 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Time-of-Day Audience Profile (00:00 – 23:00) &amp; Connected Time</h2>
-            <div class="panel-subtitle">When listeners usually tune in across the day (hourly averages &amp; dayparts)</div>
+            <h2>
+              <span>Time-of-Day Audience Profile (00:00 – 23:00) &amp; Connected Time</span>
+              <span class="time-bound-badge time-7d" title="Computed from SQLite snapshots over rolling 7 days">📅 7-Day Rolling Average</span>
+            </h2>
+            <div class="panel-subtitle">When listeners usually tune in across the day (7-day hourly averages &amp; dayparts from SQLite)</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <span id="bestHourTag" class="mount-tag">Peak Hour: --:--</span>
@@ -378,8 +429,11 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Top 5 Returning Listeners</h2>
-            <div class="panel-subtitle">Most loyal repeat listeners (bots excluded • filtered by min. avg connected time)</div>
+            <h2>
+              <span>Top 5 Returning Listeners</span>
+              <span class="time-bound-badge alltime" title="Ranked across all completed & active sessions stored in SQLite">🏆 All-Time History</span>
+            </h2>
+            <div class="panel-subtitle">Most loyal repeat listeners across all recorded station history (bots excluded • filtered by min. avg connected time)</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <select id="returningMinAvgQuickSelect" class="select-control" title="Minimum average session duration to qualify for Top 5 Returning Listeners" aria-label="Minimum average session duration">
@@ -405,8 +459,11 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Players &amp; Audio Clients</h2>
-            <div class="panel-subtitle">Parsed from Icecast User-Agent headers</div>
+            <h2>
+              <span>Players &amp; Audio Clients</span>
+              <span id="playersTimeScopeBadge" class="time-bound-badge live">Live Now</span>
+            </h2>
+            <div class="panel-subtitle" id="playersSubtitle">Parsed from Icecast User-Agent headers (Live active connections)</div>
           </div>
         </div>
         <div class="panel-body">
@@ -417,8 +474,11 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Client Categories</h2>
-            <div class="panel-subtitle">Web Browser vs Native Player vs Smart Speaker</div>
+            <h2>
+              <span>Client Categories</span>
+              <span id="categoriesTimeScopeBadge" class="time-bound-badge live">Live Now</span>
+            </h2>
+            <div class="panel-subtitle" id="categoriesSubtitle">Web Browser vs Native Player vs Smart Speaker (Live active connections)</div>
           </div>
         </div>
         <div class="panel-body">
@@ -429,8 +489,11 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title-group">
-            <h2>Operating Systems &amp; Devices</h2>
-            <div class="panel-subtitle">Desktop, Mobile, and Embedded Hardware</div>
+            <h2>
+              <span>Operating Systems &amp; Devices</span>
+              <span id="platformsTimeScopeBadge" class="time-bound-badge live">Live Now</span>
+            </h2>
+            <div class="panel-subtitle" id="platformsSubtitle">Desktop, Mobile, and Embedded Hardware (Live active connections)</div>
           </div>
         </div>
         <div class="panel-body">
@@ -581,7 +644,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=6"></script>
-  <script src="/app.js?v=6"></script>
+  <script src="/world-map.js?v=7"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>

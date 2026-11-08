@@ -7,6 +7,7 @@
   let mapViewMode = 'europe'; // 'europe' | 'romania' | 'world'
   let geoTabMode = 'countries'; // 'countries' | 'cities'
   let rightMidTabMode = 'retention'; // 'retention' | 'events'
+  let breakdownScopeMode = localStorage.getItem('ozonecast_breakdown_scope') || 'live'; // 'live' | '24h' | '7d' | 'all'
   let tableSearchQuery = '';
   let tableCategoryFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
@@ -85,6 +86,108 @@
     } catch (err) {
       console.error('Failed to load dashboard telemetry:', err);
     }
+  }
+
+  function getActiveBreakdowns() {
+    if (!dashboardState) return null;
+    if (dashboardState.breakdownsByPeriod && dashboardState.breakdownsByPeriod[breakdownScopeMode]) {
+      return dashboardState.breakdownsByPeriod[breakdownScopeMode];
+    }
+    return dashboardState.breakdowns || null;
+  }
+
+  function updateScopeBadges() {
+    const scopeBadge = document.getElementById('breakdownActiveScopeBadge');
+    const geoBadge = document.getElementById('geoTimeScopeBadge');
+    const geoSub = document.getElementById('geoSubtitle');
+    const mapBadge = document.getElementById('mapTimeScopeBadge');
+    const mapSub = document.getElementById('mapSubtitle');
+    const retentionBadge = document.getElementById('retentionTimeScopeBadge');
+    const playersBadge = document.getElementById('playersTimeScopeBadge');
+    const playersSub = document.getElementById('playersSubtitle');
+    const categoriesBadge = document.getElementById('categoriesTimeScopeBadge');
+    const categoriesSub = document.getElementById('categoriesSubtitle');
+    const platformsBadge = document.getElementById('platformsTimeScopeBadge');
+    const platformsSub = document.getElementById('platformsSubtitle');
+
+    const scopeConfig = {
+      live: {
+        label: 'Live Active Connections',
+        badgeClass: 'time-bound-badge live',
+        badgeText: 'Live Active',
+        geoSub: 'Listener share & average session time by location (Live active connections)',
+        mapSub: 'Real-time MaxMind GeoIP coordinate clustering across active connections',
+        retentionText: 'Live Cohort',
+        techSub: 'Live active connections',
+      },
+      '24h': {
+        label: 'Past 24 Hours (SQLite)',
+        badgeClass: 'time-bound-badge time-24h',
+        badgeText: 'Past 24h',
+        geoSub: 'Listener share & total session time by location (Last 24 hours in SQLite)',
+        mapSub: 'MaxMind GeoIP locations for unique listener sessions over the past 24 hours',
+        retentionText: '24h Sessions',
+        techSub: 'All sessions over past 24 hours',
+      },
+      '7d': {
+        label: 'Past 7 Days (SQLite)',
+        badgeClass: 'time-bound-badge time-7d',
+        badgeText: 'Past 7d',
+        geoSub: 'Listener share & total session time by location (Last 7 days in SQLite)',
+        mapSub: 'MaxMind GeoIP locations for unique listener sessions over the past 7 days',
+        retentionText: '7d Sessions',
+        techSub: 'All sessions over past 7 days',
+      },
+      all: {
+        label: 'All-Time Station History',
+        badgeClass: 'time-bound-badge alltime',
+        badgeText: 'All-Time',
+        geoSub: 'Lifetime listener share & total session time by location (All-Time in SQLite)',
+        mapSub: 'MaxMind GeoIP locations across all recorded station history in SQLite',
+        retentionText: 'All-Time Sessions',
+        techSub: 'All recorded station history',
+      },
+    };
+
+    const cfg = scopeConfig[breakdownScopeMode] || scopeConfig.live;
+    if (scopeBadge) {
+      scopeBadge.className = cfg.badgeClass;
+      scopeBadge.textContent = cfg.label;
+    }
+    if (geoBadge) {
+      geoBadge.className = cfg.badgeClass;
+      geoBadge.textContent = cfg.badgeText;
+    }
+    if (geoSub) geoSub.textContent = cfg.geoSub;
+    if (mapBadge) {
+      mapBadge.className = cfg.badgeClass;
+      mapBadge.textContent = cfg.badgeText;
+    }
+    if (mapSub) mapSub.textContent = cfg.mapSub;
+    if (retentionBadge && rightMidTabMode === 'retention') {
+      retentionBadge.className = cfg.badgeClass;
+      retentionBadge.textContent = cfg.retentionText;
+    }
+    if (playersBadge) {
+      playersBadge.className = cfg.badgeClass;
+      playersBadge.textContent = cfg.badgeText;
+    }
+    if (playersSub) playersSub.textContent = `Parsed from Icecast User-Agent headers (${cfg.techSub})`;
+    if (categoriesBadge) {
+      categoriesBadge.className = cfg.badgeClass;
+      categoriesBadge.textContent = cfg.badgeText;
+    }
+    if (categoriesSub) categoriesSub.textContent = `Web Browser vs Native Player vs Smart Speaker (${cfg.techSub})`;
+    if (platformsBadge) {
+      platformsBadge.className = cfg.badgeClass;
+      platformsBadge.textContent = cfg.badgeText;
+    }
+    if (platformsSub) platformsSub.textContent = `Desktop, Mobile, and Embedded Hardware (${cfg.techSub})`;
+
+    // Sync active segmented button
+    document.querySelectorAll('#breakdownScopeTabs .seg-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-scope') === breakdownScopeMode);
+    });
   }
 
   function renderAll() {
@@ -189,27 +292,55 @@
     document.getElementById('kpi24hUniqueIps').textContent = kpis.uniqueIps24h;
     document.getElementById('kpi24hSessions').textContent = kpis.totalSessions24h;
 
+    const geoScopeBadge = document.getElementById('kpiGeoScopeBadge');
+    if (geoScopeBadge) {
+      geoScopeBadge.textContent = `● Live: ${breakdowns.countries.length} ${breakdowns.countries.length === 1 ? 'country' : 'countries'}`;
+    }
+
+    const historyScopeBadge = document.getElementById('historyTimeScopeBadge');
+    if (historyScopeBadge) {
+      const rangeMap = {
+        15: '⏱️ 15m Window',
+        60: '⏱️ 1h Window',
+        360: '⏱️ 6h Window',
+        1440: '⏱️ 24h Window',
+        10080: '📅 7d Window',
+      };
+      historyScopeBadge.textContent = rangeMap[selectedRangeMinutes] || `⏱️ ${selectedRangeMinutes}m Window`;
+      historyScopeBadge.className = selectedRangeMinutes > 1440 ? 'time-bound-badge time-7d' : 'time-bound-badge time-24h';
+    }
+
+    updateScopeBadges();
+    const activeBreakdowns = getActiveBreakdowns() || breakdowns;
+
     // 3. World Map & Geo Distribution
     const svgEl = document.getElementById('worldMapSvg');
     const tooltipEl = document.getElementById('mapTooltip');
-    if (window.OzoneWorldMap) {
-      const mapListeners = excludeBotsSetting ? listeners.filter(l => !l.isBot) : listeners;
-      window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, mapListeners, mapViewMode, ip => openIpInspector(ip));
+    if (window.OzoneWorldMap && svgEl) {
+      let mapLocations = [];
+      if (breakdownScopeMode === 'live') {
+        mapLocations = excludeBotsSetting ? listeners.filter(l => !l.isBot) : listeners;
+      } else if (activeBreakdowns && activeBreakdowns.mapLocations) {
+        mapLocations = excludeBotsSetting ? activeBreakdowns.mapLocations.filter(l => !l.isBot) : activeBreakdowns.mapLocations;
+      } else {
+        mapLocations = excludeBotsSetting ? listeners.filter(l => !l.isBot) : listeners;
+      }
+      window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, mapLocations, mapViewMode, ip => openIpInspector(ip));
     }
-    renderGeoBreakdown(breakdowns);
+    renderGeoBreakdown(activeBreakdowns);
 
     // 4. Historical Chart & Retention / Events
     renderHistoryChart(history, dashboardState.trackChanges);
-    renderRetentionAndEvents(breakdowns.durationBuckets, recentEvents);
+    renderRetentionAndEvents(activeBreakdowns.durationBuckets, recentEvents);
 
     // 4.5. Time-of-Day Profile, Connected Time Stats & Top 5 Returning Listeners
     renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, kpis);
     renderTopReturningListeners(dashboardState.topReturningListeners, kpis);
 
     // 5. User-Agent / Player / OS Breakdowns
-    renderDistributionList('playersDistList', breakdowns.players, 'amber');
-    renderDistributionList('categoriesDistList', breakdowns.categories, 'cyan');
-    renderDistributionList('platformsDistList', breakdowns.platforms, 'emerald');
+    renderDistributionList('playersDistList', activeBreakdowns.players, 'amber');
+    renderDistributionList('categoriesDistList', activeBreakdowns.categories, 'cyan');
+    renderDistributionList('platformsDistList', activeBreakdowns.platforms, 'emerald');
 
     // 6. Active Clients Table
     document.getElementById('tableEndpointLabel').textContent = connection.endpointUrl;
@@ -1517,18 +1648,59 @@
       });
     });
 
+    // Audience Breakdown Scope Tabs
+    document.querySelectorAll('#breakdownScopeTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const scope = btn.getAttribute('data-scope') || 'live';
+        breakdownScopeMode = scope;
+        localStorage.setItem('ozonecast_breakdown_scope', scope);
+        updateScopeBadges();
+        if (dashboardState) {
+          const activeBreakdowns = getActiveBreakdowns();
+          renderGeoBreakdown(activeBreakdowns);
+          renderRetentionAndEvents(activeBreakdowns.durationBuckets, dashboardState.recentEvents);
+          renderDistributionList('playersDistList', activeBreakdowns.players, 'amber');
+          renderDistributionList('categoriesDistList', activeBreakdowns.categories, 'cyan');
+          renderDistributionList('platformsDistList', activeBreakdowns.platforms, 'emerald');
+
+          const svgEl = document.getElementById('worldMapSvg');
+          const tooltipEl = document.getElementById('mapTooltip');
+          if (window.OzoneWorldMap && svgEl) {
+            let mapLocations = [];
+            if (scope === 'live') {
+              mapLocations = excludeBotsSetting ? dashboardState.listeners.filter(l => !l.isBot) : dashboardState.listeners;
+            } else if (activeBreakdowns && activeBreakdowns.mapLocations) {
+              mapLocations = excludeBotsSetting ? activeBreakdowns.mapLocations.filter(l => !l.isBot) : activeBreakdowns.mapLocations;
+            } else {
+              mapLocations = excludeBotsSetting ? dashboardState.listeners.filter(l => !l.isBot) : dashboardState.listeners;
+            }
+            window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, mapLocations, mapViewMode, ip => openIpInspector(ip));
+          }
+        }
+        const scopeNames = {
+          live: 'Live Active Connections',
+          '24h': 'Past 24 Hours (SQLite)',
+          '7d': 'Past 7 Days (SQLite)',
+          all: 'All-Time Station History',
+        };
+        showToast(`Audience breakdowns switched to: ${scopeNames[scope] || scope}`);
+      });
+    });
+
     // Geo Breakdown Tabs
     document.getElementById('geoTabCountriesBtn')?.addEventListener('click', e => {
       geoTabMode = 'countries';
       e.currentTarget.classList.add('active');
       document.getElementById('geoTabCitiesBtn')?.classList.remove('active');
-      if (dashboardState) renderGeoBreakdown(dashboardState.breakdowns);
+      const b = getActiveBreakdowns() || dashboardState?.breakdowns;
+      if (b) renderGeoBreakdown(b);
     });
     document.getElementById('geoTabCitiesBtn')?.addEventListener('click', e => {
       geoTabMode = 'cities';
       e.currentTarget.classList.add('active');
       document.getElementById('geoTabCountriesBtn')?.classList.remove('active');
-      if (dashboardState) renderGeoBreakdown(dashboardState.breakdowns);
+      const b = getActiveBreakdowns() || dashboardState?.breakdowns;
+      if (b) renderGeoBreakdown(b);
     });
 
     // Historical Track Markers Toggle
@@ -1557,6 +1729,20 @@
         btn.classList.add('active');
         selectedRangeMinutes = parseInt(btn.getAttribute('data-range') || '60', 10);
         historyHoverIdx = null;
+
+        const historyScopeBadge = document.getElementById('historyTimeScopeBadge');
+        if (historyScopeBadge) {
+          const rangeMap = {
+            15: '⏱️ 15m Window',
+            60: '⏱️ 1h Window',
+            360: '⏱️ 6h Window',
+            1440: '⏱️ 24h Window',
+            10080: '📅 7d Window',
+          };
+          historyScopeBadge.textContent = rangeMap[selectedRangeMinutes] || `⏱️ ${selectedRangeMinutes}m Window`;
+          historyScopeBadge.className = selectedRangeMinutes > 1440 ? 'time-bound-badge time-7d' : 'time-bound-badge time-24h';
+        }
+
         fetchDashboard();
       });
     });
@@ -1615,15 +1801,23 @@
       document.getElementById('tabEventFeedBtn')?.classList.remove('active');
       document.getElementById('rightMidPanelTitle').textContent = 'Listener Retention & Tune-In Duration';
       document.getElementById('rightMidPanelSub').textContent = 'Distribution of active listener loyalty cohorts';
-      if (dashboardState) renderRetentionAndEvents(dashboardState.breakdowns.durationBuckets, dashboardState.recentEvents);
+      const b = getActiveBreakdowns() || dashboardState?.breakdowns;
+      if (b && dashboardState) renderRetentionAndEvents(b.durationBuckets, dashboardState.recentEvents);
+      updateScopeBadges();
     });
     document.getElementById('tabEventFeedBtn')?.addEventListener('click', e => {
       rightMidTabMode = 'events';
       e.currentTarget.classList.add('active');
       document.getElementById('tabRetentionBtn')?.classList.remove('active');
       document.getElementById('rightMidPanelTitle').textContent = 'Real-Time Join / Leave Activity Log';
-      document.getElementById('rightMidPanelSub').textContent = 'Audit trail of listener connections and disconnections';
-      if (dashboardState) renderRetentionAndEvents(dashboardState.breakdowns.durationBuckets, dashboardState.recentEvents);
+      document.getElementById('rightMidPanelSub').textContent = 'Audit trail of listener connections and disconnections (Last 24h)';
+      const retBadge = document.getElementById('retentionTimeScopeBadge');
+      if (retBadge) {
+        retBadge.className = 'time-bound-badge time-24h';
+        retBadge.textContent = '⏱️ Last 24h Log';
+      }
+      const b = getActiveBreakdowns() || dashboardState?.breakdowns;
+      if (b && dashboardState) renderRetentionAndEvents(b.durationBuckets, dashboardState.recentEvents);
     });
 
     // Search & Category filter

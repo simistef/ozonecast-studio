@@ -534,6 +534,193 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false) {
   };
 }
 
+/**
+ * Computes comprehensive aggregated breakdowns (Countries, Cities, Players, Categories, OS, Duration cohorts)
+ * from recorded listener_sessions in SQLite over a specified historical range (e.g. 1440 = 24h, 10080 = 7d, 0 = All-Time).
+ */
+function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, excludeBots = false) {
+  const since = rangeMinutes > 0 ? Date.now() - rangeMinutes * 60 * 1000 : 0;
+  const cfg = getConfig();
+  const excludeFlag = excludeBots || cfg.returningExcludeBots !== false ? 1 : 0;
+
+  const query = `
+    SELECT
+      ip,
+      country_code,
+      country_name,
+      city,
+      lat,
+      lon,
+      player,
+      category,
+      os,
+      duration_seconds,
+      is_active
+    FROM listener_sessions
+    WHERE (last_seen >= ? OR ? = 0)
+      AND (? IS NULL OR source_mode = ?)
+      AND (? = 0 OR (
+        category != 'Bot / Ripper'
+        AND ip NOT IN (SELECT ip FROM bot_ips)
+        AND LOWER(user_agent) NOT LIKE '%bot%'
+        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(user_agent) NOT LIKE '%crawler%'
+        AND LOWER(user_agent) NOT LIKE '%spider%'
+        AND LOWER(user_agent) NOT LIKE '%streamripper%'
+      ))
+  `;
+
+  const rows = db.prepare(query).all(since, since, sourceMode, sourceMode, excludeFlag);
+
+  const total = rows.length || 1;
+  const countryMap = new Map();
+  const cityMap = new Map();
+  const playerMap = new Map();
+  const categoryMap = new Map();
+  const osMap = new Map();
+  const uniqueIpSet = new Set();
+  const mapLocations = [];
+
+  const durationBuckets = [
+    { id: 'u5m', label: '< 5 min', min: 0, max: 300, count: 0 },
+    { id: '5to15m', label: '5 – 15 min', min: 300, max: 900, count: 0 },
+    { id: '15to30m', label: '15 – 30 min', min: 900, max: 1800, count: 0 },
+    { id: '30to60m', label: '30 – 60 min', min: 1800, max: 3600, count: 0 },
+    { id: '1to2h', label: '1 – 2 hrs', min: 3600, max: 7200, count: 0 },
+    { id: 'over2h', label: '2+ hrs', min: 7200, max: Infinity, count: 0 },
+  ];
+
+  let totalDurationSec = 0;
+  const seenMapIps = new Set();
+
+  for (const r of rows) {
+    const sec = r.duration_seconds || 0;
+    totalDurationSec += sec;
+    uniqueIpSet.add(r.ip);
+
+    // Duration cohorts
+    for (const b of durationBuckets) {
+      if (sec >= b.min && sec < b.max) {
+        b.count++;
+        break;
+      }
+    }
+
+    // Country aggregation
+    const cc = r.country_code || 'UN';
+    const cName = r.country_name || cc;
+    if (!countryMap.has(cc)) {
+      countryMap.set(cc, {
+        countryCode: cc,
+        countryName: cName,
+        count: 0,
+        totalDurationSec: 0,
+      });
+    }
+    const cEntry = countryMap.get(cc);
+    cEntry.count++;
+    cEntry.totalDurationSec += sec;
+
+    // City aggregation
+    const rawCity = (r.city || '').trim();
+    const hasCity = Boolean(rawCity && rawCity !== cName && rawCity !== 'Unknown');
+    const displayCity = hasCity ? rawCity : `Unresolved City (${cName})`;
+    const cityKey = hasCity ? `${rawCity}::${cc}` : `unresolved::${cc}`;
+    if (!cityMap.has(cityKey)) {
+      cityMap.set(cityKey, {
+        city: displayCity,
+        hasCity,
+        countryCode: cc,
+        countryName: cName,
+        count: 0,
+        totalDurationSec: 0,
+      });
+    }
+    const cityEntry = cityMap.get(cityKey);
+    cityEntry.count++;
+    cityEntry.totalDurationSec += sec;
+
+    // Player, Category, OS
+    const pName = r.player || 'Other';
+    playerMap.set(pName, (playerMap.get(pName) || 0) + 1);
+
+    const catName = r.category || 'Other';
+    categoryMap.set(catName, (categoryMap.get(catName) || 0) + 1);
+
+    const osName = r.os || 'Other';
+    osMap.set(osName, (osMap.get(osName) || 0) + 1);
+
+    // Map location pins
+    if (!seenMapIps.has(r.ip) && (r.lat || r.lon)) {
+      seenMapIps.add(r.ip);
+      mapLocations.push({
+        ip: r.ip,
+        lat: r.lat,
+        lon: r.lon,
+        city: r.city,
+        countryCode: r.country_code,
+        countryName: r.country_name,
+        player: r.player,
+        category: r.category,
+        os: r.os,
+        connectedSeconds: sec,
+        isBot: r.category === 'Bot / Ripper',
+      });
+    }
+  }
+
+  const toSortedDist = map =>
+    Array.from(map.entries())
+      .map(([name, count]) => ({
+        name,
+        count,
+        sharePct: Number(((count / total) * 100).toFixed(1)),
+      }))
+      .sort((a, b) => b.count - a.count);
+
+  const countries = Array.from(countryMap.values())
+    .map(c => ({
+      ...c,
+      sharePct: Number(((c.count / total) * 100).toFixed(1)),
+      avgDurationSec: Math.round(c.totalDurationSec / c.count),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const cities = Array.from(cityMap.values())
+    .map(c => ({
+      ...c,
+      sharePct: Number(((c.count / total) * 100).toFixed(1)),
+      avgDurationSec: Math.round(c.totalDurationSec / c.count),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const sortedDurations = rows.map(r => r.duration_seconds || 0).sort((a, b) => a - b);
+  const avgSessionDurationSec = rows.length > 0 ? Math.round(totalDurationSec / rows.length) : 0;
+  const medianSessionDurationSec = sortedDurations.length > 0 ? sortedDurations[Math.floor(sortedDurations.length / 2)] : 0;
+  const p90SessionDurationSec = sortedDurations.length > 0 ? sortedDurations[Math.min(sortedDurations.length - 1, Math.floor(sortedDurations.length * 0.9))] : 0;
+  const longestSessionSec = sortedDurations.length > 0 ? sortedDurations[sortedDurations.length - 1] : 0;
+
+  return {
+    totalSessions: rows.length,
+    uniqueIps: uniqueIpSet.size,
+    avgSessionDurationSec,
+    medianSessionDurationSec,
+    p90SessionDurationSec,
+    longestSessionSec,
+    totalListeningHours: Number((totalDurationSec / 3600).toFixed(2)),
+    countries,
+    cities,
+    players: toSortedDist(playerMap),
+    categories: toSortedDist(categoryMap),
+    platforms: toSortedDist(osMap),
+    durationBuckets: durationBuckets.map(b => ({
+      ...b,
+      sharePct: Number(((b.count / total) * 100).toFixed(1)),
+    })),
+    mapLocations,
+  };
+}
+
 function getIpAliasesMap() {
   const rows = db.prepare('SELECT ip, friendly_name, notes, updated_at FROM ip_aliases').all();
   const map = {};
@@ -879,6 +1066,7 @@ module.exports = {
   recordPollResult,
   getHistoricalSeries,
   getHistoricalTrackChanges,
+  getHistoricalBreakdowns,
   getTimeOfDayProfile,
   getTopReturningListeners,
   getAggregatedStats,

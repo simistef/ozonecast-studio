@@ -10,6 +10,7 @@ const {
   recordPollResult,
   getHistoricalSeries,
   getHistoricalTrackChanges,
+  getHistoricalBreakdowns,
   getTimeOfDayProfile,
   getTopReturningListeners,
   getAggregatedStats,
@@ -428,7 +429,33 @@ app.get('/api/dashboard', async (req, res) => {
   const botListeners = allListeners.filter(l => l.isBot);
   const effectiveListeners = excludeBots ? humanListeners : allListeners;
 
-  const breakdowns = computeBreakdowns(effectiveListeners);
+  const breakdownsLive = computeBreakdowns(effectiveListeners);
+  const breakdowns24h = getHistoricalBreakdowns(1440, modeForHistory, excludeBots);
+  const breakdowns7d = getHistoricalBreakdowns(10080, modeForHistory, excludeBots);
+  const breakdownsAll = getHistoricalBreakdowns(0, modeForHistory, excludeBots);
+
+  const breakdownsByPeriod = {
+    live: {
+      ...breakdownsLive,
+      mapLocations: effectiveListeners.map(l => ({
+        ip: l.ip,
+        lat: l.geo?.lat,
+        lon: l.geo?.lon,
+        city: l.geo?.city,
+        countryCode: l.geo?.countryCode,
+        countryName: l.geo?.countryName,
+        player: l.ua?.player,
+        category: l.ua?.category,
+        os: l.ua?.os,
+        connectedSeconds: l.connectedSeconds,
+        isBot: l.isBot,
+      })),
+    },
+    '24h': breakdowns24h,
+    '7d': breakdowns7d,
+    all: breakdownsAll,
+  };
+
   const history = getHistoricalSeries(rangeMinutes, modeForHistory, excludeBots);
   const trackChanges = getHistoricalTrackChanges(rangeMinutes, modeForHistory);
   const timeOfDay = getTimeOfDayProfile(modeForHistory, excludeBots);
@@ -466,21 +493,21 @@ app.get('/api/dashboard', async (req, res) => {
       botListenersCount: botListeners.length,
       excludeBots,
       reportedListeners: excludeBots ? humanListeners.length : latestState.reportedCount,
-      uniqueIps: breakdowns.uniqueIps,
-      duplicateConnections: breakdowns.duplicateConnections,
-      avgSessionDurationSec: breakdowns.avgSessionDurationSec,
-      medianSessionDurationSec: breakdowns.medianSessionDurationSec,
-      p90SessionDurationSec: breakdowns.p90SessionDurationSec,
-      longestSessionSec: breakdowns.longestSessionSec,
-      shortestSessionSec: breakdowns.shortestSessionSec,
-      totalActiveListeningHours: breakdowns.totalActiveListeningHours,
+      uniqueIps: breakdownsLive.uniqueIps,
+      duplicateConnections: breakdownsLive.duplicateConnections,
+      avgSessionDurationSec: breakdownsLive.avgSessionDurationSec,
+      medianSessionDurationSec: breakdownsLive.medianSessionDurationSec,
+      p90SessionDurationSec: breakdownsLive.p90SessionDurationSec,
+      longestSessionSec: breakdownsLive.longestSessionSec,
+      shortestSessionSec: breakdownsLive.shortestSessionSec,
+      totalActiveListeningHours: breakdownsLive.totalActiveListeningHours,
       peak24h: Math.max(stats24h.peak24h, effectiveListeners.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
       peak24hTs: stats24h.peak24hTs,
       allTimePeak: Math.max(stats24h.allTimePeak, effectiveListeners.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
       totalSessions24h: stats24h.totalSessions24h,
-      uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdowns.uniqueIps),
-      uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdowns.countries.length),
-      totalListeningHours24h: Math.max(stats24h.totalListeningHours24h, breakdowns.totalActiveListeningHours),
+      uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdownsLive.uniqueIps),
+      uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdownsLive.countries.length),
+      totalListeningHours24h: Math.max(stats24h.totalListeningHours24h, breakdownsLive.totalActiveListeningHours),
       returningListenerCount: stats24h.returningListenerCount,
       returningMinAvgSec: config.returningMinAvgSec ?? 60,
       returningExcludeBots: config.returningExcludeBots !== false,
@@ -489,13 +516,14 @@ app.get('/api/dashboard', async (req, res) => {
     listeners: listenersWithAliases,
     ipAliases,
     breakdowns: {
-      countries: breakdowns.countries,
-      cities: breakdowns.cities,
-      players: breakdowns.players,
-      categories: breakdowns.categories,
-      platforms: breakdowns.platforms,
-      durationBuckets: breakdowns.durationBuckets,
+      countries: breakdownsLive.countries,
+      cities: breakdownsLive.cities,
+      players: breakdownsLive.players,
+      categories: breakdownsLive.categories,
+      platforms: breakdownsLive.platforms,
+      durationBuckets: breakdownsLive.durationBuckets,
     },
+    breakdownsByPeriod,
     timeOfDay,
     topReturningListeners,
     history,

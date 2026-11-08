@@ -1239,6 +1239,116 @@ button, input, select, textarea {
   color: var(--text-primary);
 }
 
+/* Time-Bound Badge Indicators */
+.time-bound-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 7.5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  line-height: 1.25;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.time-bound-badge.live {
+  background: var(--accent-emerald-soft);
+  color: var(--accent-emerald);
+  border-color: hsla(152, 76%, 48%, 0.35);
+}
+
+.time-bound-badge.live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-emerald);
+  box-shadow: 0 0 7px var(--accent-emerald);
+  display: inline-block;
+  animation: pulse-live-dot 1.8s infinite ease-in-out;
+}
+
+@keyframes pulse-live-dot {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+.time-bound-badge.time-24h {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+  border-color: hsla(28, 95%, 56%, 0.35);
+}
+
+.time-bound-badge.time-7d {
+  background: var(--accent-cyan-soft);
+  color: var(--accent-cyan);
+  border-color: hsla(196, 88%, 54%, 0.35);
+}
+
+.time-bound-badge.alltime {
+  background: hsla(280, 75%, 55%, 0.15);
+  color: hsl(280, 95%, 85%);
+  border-color: hsla(280, 80%, 65%, 0.35);
+}
+
+/* Audience Breakdown Scope Control Toolbar */
+.breakdown-scope-strip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-surface);
+}
+
+.breakdown-scope-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breakdown-scope-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.breakdown-scope-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.breakdown-scope-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.scope-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.scope-dot.live {
+  background: var(--accent-emerald);
+  box-shadow: 0 0 6px var(--accent-emerald);
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 1200px) {
   .kpi-grid {
