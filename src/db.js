@@ -220,8 +220,14 @@ try {
       WHEN 4 THEN 'Disclosure - Higher Than Ever Before'
       ELSE 'Bicep - Apricots (Ozone.FM Club Edit)'
     END,
-    last_track_progress_sec = 25 + (ABS(RANDOM()) % 150)
-    WHERE (last_track IS NULL OR last_track = '') AND source_mode = 'simulation';
+    last_track_progress_sec = CASE (ABS(RANDOM()) % 5)
+      WHEN 0 THEN 18 + (ABS(RANDOM()) % 12)  -- 18-30s (Intro skip)
+      WHEN 1 THEN 45 + (ABS(RANDOM()) % 40)  -- 45-85s (Early mid)
+      WHEN 2 THEN 80 + (ABS(RANDOM()) % 40)  -- 80-120s (Mid)
+      WHEN 3 THEN 130 + (ABS(RANDOM()) % 45) -- 130-175s (Late)
+      ELSE 180 + (ABS(RANDOM()) % 60)        -- 180-240s (Outro)
+    END
+    WHERE source_mode = 'simulation';
   `);
 } catch (_) {}
 
@@ -759,21 +765,14 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
 
 /**
  * Query Detractor Songs — songs with highest listener drop-offs.
- * Includes average playtime into song when left and previous listener station stay time.
+ * Measures on UNIQUE listener IPs only (each unique listener IP counts as 1 drop-off).
+ * ALWAYS excludes:
+ *   1. Bots, crawlers, rippers, and bot_ips.
+ *   2. Station Admin IPs marked with "Me" (friendly_name is 'Me' or begins with 'Me').
  */
-function getDetractorSongs(rangeMinutes = 1440, sourceMode = null, excludeBots = false, limit = 10) {
+function getDetractorSongs(rangeMinutes = 1440, sourceMode = null, excludeBots = true, limit = 10) {
   const now = Date.now();
   const since = rangeMinutes > 0 ? now - rangeMinutes * 60 * 1000 : 0;
-
-  const botFilter = excludeBots ? `
-    AND category != 'Bot / Ripper'
-    AND ip NOT IN (SELECT ip FROM bot_ips)
-    AND LOWER(user_agent) NOT LIKE '%bot%'
-    AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
-    AND LOWER(user_agent) NOT LIKE '%crawler%'
-    AND LOWER(user_agent) NOT LIKE '%spider%'
-    AND LOWER(user_agent) NOT LIKE '%streamripper%'
-  ` : '';
 
   const modeFilter = sourceMode ? 'AND source_mode = ?' : '';
   const params = [];
@@ -782,63 +781,95 @@ function getDetractorSongs(rangeMinutes = 1440, sourceMode = null, excludeBots =
   params.push(limit);
 
   const sql = `
+    WITH unique_ip_drops AS (
+      SELECT
+        ip,
+        last_track as track,
+        AVG(duration_seconds) as ip_station_stay_sec,
+        SUM(duration_seconds) as ip_total_lost_sec,
+        AVG(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END) as ip_playtime_when_left_sec,
+        MAX(last_seen) as ip_last_seen
+      FROM listener_sessions
+      WHERE is_active = 0
+        AND last_track IS NOT NULL
+        AND TRIM(last_track) != ''
+        AND last_track != 'No track metadata recorded'
+        ${since > 0 ? 'AND last_seen >= ?' : ''}
+        ${modeFilter}
+        -- Bots and crawlers are ALWAYS excluded from detractor songs
+        AND category != 'Bot / Ripper'
+        AND ip NOT IN (SELECT ip FROM bot_ips)
+        AND LOWER(user_agent) NOT LIKE '%bot%'
+        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(user_agent) NOT LIKE '%crawler%'
+        AND LOWER(user_agent) NOT LIKE '%spider%'
+        AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        -- Station admin ("Me") IPs are ALWAYS excluded
+        AND ip NOT IN (
+          SELECT ip FROM ip_aliases
+          WHERE LOWER(TRIM(friendly_name)) = 'me'
+             OR LOWER(friendly_name) LIKE 'me %'
+             OR LOWER(friendly_name) LIKE 'me-%'
+             OR LOWER(friendly_name) LIKE 'me -%'
+             OR LOWER(friendly_name) LIKE '%(me)%'
+             OR LOWER(TRIM(friendly_name)) = 'admin'
+             OR LOWER(TRIM(friendly_name)) = 'station admin'
+             OR LOWER(notes) LIKE '%me%'
+        )
+      GROUP BY ip, last_track
+    )
     SELECT
-      last_track as track,
-      COUNT(*) as leave_count,
-      COUNT(DISTINCT ip) as unique_ips,
-      ROUND(AVG(duration_seconds)) as avg_station_stay_sec,
-      MIN(duration_seconds) as min_station_stay_sec,
-      MAX(duration_seconds) as max_station_stay_sec,
-      SUM(duration_seconds) as total_lost_listening_sec,
-      ROUND(AVG(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END)) as avg_playtime_when_left_sec,
-      MIN(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END) as min_playtime_when_left_sec,
-      MAX(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END) as max_playtime_when_left_sec,
-      SUM(CASE WHEN last_track_progress_sec > 0 AND last_track_progress_sec <= 30 THEN 1 ELSE 0 END) as early_dropoffs_30s,
-      MAX(last_seen) as last_drop_ts
-    FROM listener_sessions
-    WHERE is_active = 0
-      AND last_track IS NOT NULL
-      AND TRIM(last_track) != ''
-      AND last_track != 'No track metadata recorded'
-      ${since > 0 ? 'AND last_seen >= ?' : ''}
-      ${modeFilter}
-      ${botFilter}
-    GROUP BY last_track
-    ORDER BY leave_count DESC, total_lost_listening_sec DESC
+      track,
+      COUNT(*) as unique_ips,
+      ROUND(AVG(ip_station_stay_sec)) as avg_station_stay_sec,
+      MIN(ip_station_stay_sec) as min_station_stay_sec,
+      MAX(ip_station_stay_sec) as max_station_stay_sec,
+      SUM(ip_total_lost_sec) as total_lost_listening_sec,
+      ROUND(AVG(ip_playtime_when_left_sec)) as avg_playtime_when_left_sec,
+      MIN(ip_playtime_when_left_sec) as min_playtime_when_left_sec,
+      MAX(ip_playtime_when_left_sec) as max_playtime_when_left_sec,
+      SUM(CASE WHEN ip_playtime_when_left_sec > 0 AND ip_playtime_when_left_sec <= 30 THEN 1 ELSE 0 END) as early_dropoffs_30s,
+      SUM(CASE WHEN ip_playtime_when_left_sec > 30 AND ip_playtime_when_left_sec <= 120 THEN 1 ELSE 0 END) as mid_dropoffs_2m,
+      SUM(CASE WHEN ip_playtime_when_left_sec > 120 THEN 1 ELSE 0 END) as late_dropoffs,
+      MAX(ip_last_seen) as last_drop_ts
+    FROM unique_ip_drops
+    GROUP BY track
+    ORDER BY unique_ips DESC, total_lost_listening_sec DESC
     LIMIT ?
   `;
 
-  return db.prepare(sql).all(...params).map((row, idx) => ({
-    rank: idx + 1,
-    track: row.track,
-    leaveCount: Number(row.leave_count),
-    uniqueIps: Number(row.unique_ips),
-    avgStationStaySec: Number(row.avg_station_stay_sec || 0),
-    minStationStaySec: Number(row.min_station_stay_sec || 0),
-    maxStationStaySec: Number(row.max_station_stay_sec || 0),
-    totalLostListeningSec: Number(row.total_lost_listening_sec || 0),
-    avgPlaytimeWhenLeftSec: Number(row.avg_playtime_when_left_sec || 0),
-    minPlaytimeWhenLeftSec: Number(row.min_playtime_when_left_sec || 0),
-    maxPlaytimeWhenLeftSec: Number(row.max_playtime_when_left_sec || 0),
-    earlyDropoffs30s: Number(row.early_dropoffs_30s || 0),
-    earlyDropoffPct: row.leave_count > 0 ? Math.round((row.early_dropoffs_30s / row.leave_count) * 100) : 0,
-    lastDropTs: Number(row.last_drop_ts || 0),
-  }));
+  return db.prepare(sql).all(...params).map((row, idx) => {
+    const totalU = Number(row.unique_ips || 0);
+    const early = Number(row.early_dropoffs_30s || 0);
+    const mid = Number(row.mid_dropoffs_2m || 0);
+    const late = Number(row.late_dropoffs || 0);
+
+    return {
+      rank: idx + 1,
+      track: row.track,
+      uniqueIps: totalU,
+      leaveCount: totalU,
+      avgStationStaySec: Number(row.avg_station_stay_sec || 0),
+      minStationStaySec: Number(row.min_station_stay_sec || 0),
+      maxStationStaySec: Number(row.max_station_stay_sec || 0),
+      totalLostListeningSec: Number(row.total_lost_listening_sec || 0),
+      avgPlaytimeWhenLeftSec: Number(row.avg_playtime_when_left_sec || 0),
+      minPlaytimeWhenLeftSec: Number(row.min_playtime_when_left_sec || 0),
+      maxPlaytimeWhenLeftSec: Number(row.max_playtime_when_left_sec || 0),
+      earlyDropoffs30s: early,
+      earlyDropoffPct: totalU > 0 ? Math.round((early / totalU) * 100) : 0,
+      midDropoffs2m: mid,
+      midDropoffPct: totalU > 0 ? Math.round((mid / totalU) * 100) : 0,
+      lateDropoffs: late,
+      lateDropoffPct: totalU > 0 ? Math.round((late / totalU) * 100) : 0,
+      lastDropTs: Number(row.last_drop_ts || 0),
+    };
+  });
 }
 
-function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots = false) {
+function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots = true) {
   const now = Date.now();
   const since = rangeMinutes > 0 ? now - rangeMinutes * 60 * 1000 : 0;
-
-  const botFilter = excludeBots ? `
-    AND category != 'Bot / Ripper'
-    AND ip NOT IN (SELECT ip FROM bot_ips)
-    AND LOWER(user_agent) NOT LIKE '%bot%'
-    AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
-    AND LOWER(user_agent) NOT LIKE '%crawler%'
-    AND LOWER(user_agent) NOT LIKE '%spider%'
-    AND LOWER(user_agent) NOT LIKE '%streamripper%'
-  ` : '';
 
   const modeFilter = sourceMode ? 'AND source_mode = ?' : '';
   const params = [];
@@ -846,21 +877,50 @@ function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots
   if (sourceMode) params.push(sourceMode);
 
   const sql = `
+    WITH unique_ip_drops AS (
+      SELECT
+        ip,
+        last_track as track,
+        AVG(duration_seconds) as ip_station_stay_sec,
+        SUM(duration_seconds) as ip_total_lost_sec,
+        AVG(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END) as ip_playtime_when_left_sec
+      FROM listener_sessions
+      WHERE is_active = 0
+        AND last_track IS NOT NULL
+        AND TRIM(last_track) != ''
+        AND last_track != 'No track metadata recorded'
+        ${since > 0 ? 'AND last_seen >= ?' : ''}
+        ${modeFilter}
+        -- Bots and crawlers are ALWAYS excluded
+        AND category != 'Bot / Ripper'
+        AND ip NOT IN (SELECT ip FROM bot_ips)
+        AND LOWER(user_agent) NOT LIKE '%bot%'
+        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(user_agent) NOT LIKE '%crawler%'
+        AND LOWER(user_agent) NOT LIKE '%spider%'
+        AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        -- Station admin ("Me") IPs are ALWAYS excluded
+        AND ip NOT IN (
+          SELECT ip FROM ip_aliases
+          WHERE LOWER(TRIM(friendly_name)) = 'me'
+             OR LOWER(friendly_name) LIKE 'me %'
+             OR LOWER(friendly_name) LIKE 'me-%'
+             OR LOWER(friendly_name) LIKE 'me -%'
+             OR LOWER(friendly_name) LIKE '%(me)%'
+             OR LOWER(TRIM(friendly_name)) = 'admin'
+             OR LOWER(TRIM(friendly_name)) = 'station admin'
+             OR LOWER(notes) LIKE '%me%'
+        )
+      GROUP BY ip, last_track
+    )
     SELECT
       COUNT(*) as total_tuneouts,
-      COUNT(DISTINCT last_track) as songs_affected,
+      COUNT(DISTINCT track) as songs_affected,
       COUNT(DISTINCT ip) as unique_dropped_listeners,
-      ROUND(AVG(duration_seconds)) as avg_station_stay_sec,
-      ROUND(AVG(CASE WHEN last_track_progress_sec > 0 THEN last_track_progress_sec ELSE NULL END)) as avg_playtime_when_left_sec,
-      SUM(duration_seconds) as total_lost_listening_sec
-    FROM listener_sessions
-    WHERE is_active = 0
-      AND last_track IS NOT NULL
-      AND TRIM(last_track) != ''
-      AND last_track != 'No track metadata recorded'
-      ${since > 0 ? 'AND last_seen >= ?' : ''}
-      ${modeFilter}
-      ${botFilter}
+      ROUND(AVG(ip_station_stay_sec)) as avg_station_stay_sec,
+      ROUND(AVG(ip_playtime_when_left_sec)) as avg_playtime_when_left_sec,
+      SUM(ip_total_lost_sec) as total_lost_listening_sec
+    FROM unique_ip_drops
   `;
 
   const row = db.prepare(sql).get(...params);

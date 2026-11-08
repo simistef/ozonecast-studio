@@ -184,7 +184,14 @@ function seedSimulationHistory() {
       const dur = Math.round(prof.avgSec * (0.75 + ((s * 17) % 50) / 100));
       const startTs = endTs - dur * 1000;
       const track = TRACK_ROTATION[(s * 3 + prof.sessions) % TRACK_ROTATION.length];
-      const trackProgress = 20 + ((s * 41) % 155);
+      const progressPhases = [
+        18 + (s % 12),        // intro: 18-30s
+        45 + ((s * 7) % 45),  // early mid: 45-90s
+        85 + ((s * 13) % 35), // mid: 85-120s
+        135 + ((s * 19) % 45),// late: 135-180s
+        190 + ((s * 23) % 50),// outro: 190-240s
+      ];
+      const trackProgress = progressPhases[(s + prof.sessions) % progressPhases.length];
       insertHistSession.run(
         `simulation:hist:${prof.ip}:${s}`,
         String(3000 + s),

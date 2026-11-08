@@ -646,9 +646,9 @@
       scopeBadge.className = curScope.badgeClass;
     }
 
-    const totalDrops = summary?.totalTuneOuts ?? (songs || []).reduce((acc, s) => acc + (s.leaveCount || 0), 0);
+    const totalUniqueIpsLost = summary?.uniqueDroppedListeners ?? (songs || []).reduce((acc, s) => acc + (s.uniqueIps || 0), 0);
     if (dropsBadge) {
-      dropsBadge.textContent = `📉 ${totalDrops} Tune-Out${totalDrops === 1 ? '' : 's'}`;
+      dropsBadge.textContent = `📉 ${totalUniqueIpsLost} Unique Listener IP${totalUniqueIpsLost === 1 ? '' : 's'} Lost`;
     }
 
     // Sync button active state
@@ -666,19 +666,19 @@
 
       kpiEl.innerHTML = `
         <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:9px 12px">
-          <div style="font-size:11px;color:var(--text-muted);font-weight:600">TOTAL TUNE-OUTS</div>
+          <div style="font-size:11px;color:var(--text-muted);font-weight:600">UNIQUE LISTENERS LOST</div>
           <div class="mono" style="margin-top:2px;font-size:16px;font-weight:700;color:var(--accent-crimson)">
-            ${totalDrops} <span style="font-size:11px;font-weight:500;color:var(--text-secondary)">drops</span>
+            ${totalUniqueIpsLost} <span style="font-size:11px;font-weight:500;color:var(--text-secondary)">unique IPs</span>
           </div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
-            ${summary?.uniqueDroppedListeners || 0} unique listeners • ${summary?.songsAffected || (songs || []).length} songs
+            ${summary?.songsAffected || (songs || []).length} songs affected • Admin ("Me") &amp; bots excluded
           </div>
         </div>
 
         <div style="background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;padding:9px 12px;min-width:0">
           <div style="font-size:11px;color:var(--text-muted);font-weight:600">TOP DETRACTOR SONG</div>
           <div class="mono" style="margin-top:2px;font-size:14px;font-weight:700;color:var(--accent-amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(topTrackTitle)}">
-            ${topTrack ? `#1 (${topTrack.leaveCount} drops)` : 'None'}
+            ${topTrack ? `#1 (${topTrack.uniqueIps} unique IPs)` : 'None'}
           </div>
           <div style="font-size:11px;color:var(--text-secondary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(topTrackTitle)}">
             ${escapeHtml(topTrackTitle)}
@@ -691,7 +691,7 @@
             ${avgPlaytime > 0 ? formatDurationClock(avgPlaytime) : '--:--'}
           </div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:3px">
-            ${avgPlaytime > 0 ? `${formatDurationHuman(avgPlaytime)} into song` : 'No song progress recorded'}
+            ${avgPlaytime > 0 ? `${formatDurationHuman(avgPlaytime)} into track` : 'No track progress recorded'}
           </div>
         </div>
 
@@ -713,28 +713,36 @@
     if (items.length === 0) {
       listEl.innerHTML = `
         <div style="color:var(--text-muted);font-size:12.5px;padding:18px 14px;background:var(--bg-canvas);border:1px solid var(--border-subtle);border-radius:6px;text-align:center">
-          No listener tune-outs recorded for ${curScope.text.replace(/^[^\w]+/, '')} yet.
+          No unique listener drop-offs recorded for ${curScope.text.replace(/^[^\w]+/, '')} yet.
           <div style="font-size:11.5px;color:var(--text-secondary);margin-top:4px">
-            Whenever listeners disconnect while a song is broadcasting, OzoneCast records the song title, playtime progress at disconnect, and their total station listening time.
+            Whenever unique listeners disconnect while a track is broadcasting, OzoneCast records the song title, playtime progress at disconnect, and their previous station listening time. (Station Admin "Me" IPs and bots are automatically excluded).
           </div>
         </div>
       `;
       return;
     }
 
-    const maxDrops = items[0]?.leaveCount || 1;
+    const maxDrops = items[0]?.uniqueIps || 1;
 
     listEl.innerHTML = items
       .map(song => {
-        const pctOfTop = Math.min(100, Math.max(8, Math.round((song.leaveCount / maxDrops) * 100)));
+        const pctOfTop = Math.min(100, Math.max(8, Math.round((song.uniqueIps / maxDrops) * 100)));
         const isNumOne = song.rank === 1;
         const rankColor = isNumOne ? 'var(--accent-crimson)' : 'var(--accent-amber)';
         const rankBg = isNumOne ? 'hsla(355,84%,60%,0.15)' : 'hsla(28,95%,56%,0.12)';
         const rankBorder = isNumOne ? 'hsla(355,84%,60%,0.35)' : 'hsla(28,95%,56%,0.3)';
 
-        const earlyDropTag = song.earlyDropoffs30s > 0
-          ? `<span class="kpi-subtag amber" style="font-size:10.5px;padding:1px 6px" title="${song.earlyDropoffs30s} listener(s) disconnected in the first 30s of this song">⚡ ${song.earlyDropoffPct}% left &lt; 30s</span>`
-          : '';
+        const timingTags = [];
+        if (song.earlyDropoffs30s > 0) {
+          timingTags.push(`<span class="kpi-subtag amber" style="font-size:10.5px;padding:1px 6px" title="${song.earlyDropoffs30s} unique listener(s) left in the first 30s (immediate intro skip)">⚡ ${song.earlyDropoffPct}% &lt;30s (Intro)</span>`);
+        }
+        if (song.midDropoffs2m > 0) {
+          timingTags.push(`<span class="kpi-subtag cyan" style="font-size:10.5px;padding:1px 6px" title="${song.midDropoffs2m} unique listener(s) left between 30s and 2m (mid-track)">⏯️ ${song.midDropoffPct}% 30s–2m (Mid)</span>`);
+        }
+        if (song.lateDropoffs > 0) {
+          timingTags.push(`<span class="kpi-subtag emerald" style="font-size:10.5px;padding:1px 6px" title="${song.lateDropoffs} unique listener(s) left after 2 minutes (late/outro)">⏳ ${song.lateDropoffPct}% &gt;2m (Late)</span>`);
+        }
+        const timingBadgesHtml = timingTags.join(' ');
 
         const minMaxStay = (song.minStationStaySec > 0 || song.maxStationStaySec > 0)
           ? `<span style="color:var(--text-muted);font-size:11px">(Min ${formatDurationHuman(song.minStationStaySec)} • Max ${formatDurationHuman(song.maxStationStaySec)})</span>`
@@ -750,15 +758,15 @@
                     🎵 ${escapeHtml(song.track)}
                   </span>
                   <span class="mount-tag" style="background:hsla(355,84%,60%,0.15);color:hsl(355,95%,80%);border-color:hsla(355,80%,65%,0.3);font-size:11px;font-weight:600">
-                    ${song.leaveCount} drop-off${song.leaveCount === 1 ? '' : 's'} (${song.uniqueIps} IP${song.uniqueIps === 1 ? '' : 's'})
+                    📉 ${song.uniqueIps} unique listener IP${song.uniqueIps === 1 ? '' : 's'}
                   </span>
-                  ${earlyDropTag}
+                  ${timingBadgesHtml}
                 </div>
 
                 <div style="display:flex;align-items:center;gap:14px;margin-top:5px;font-size:12px;color:var(--text-secondary);flex-wrap:wrap">
                   <div>
                     ⏱️ Playtime when left: <strong class="mono" style="color:var(--accent-amber);font-weight:600">${song.avgPlaytimeWhenLeftSec > 0 ? formatDurationClock(song.avgPlaytimeWhenLeftSec) : '--:--'}</strong>
-                    <span style="color:var(--text-muted);font-size:11px">${song.avgPlaytimeWhenLeftSec > 0 ? `(${formatDurationHuman(song.avgPlaytimeWhenLeftSec)} into song)` : ''}</span>
+                    <span style="color:var(--text-muted);font-size:11px">${song.avgPlaytimeWhenLeftSec > 0 ? `(${formatDurationHuman(song.avgPlaytimeWhenLeftSec)} into track)` : ''}</span>
                   </div>
                   <div>
                     📻 Previous station stay: <strong class="mono" style="color:var(--accent-emerald);font-weight:600">${formatDurationHuman(song.avgStationStaySec)}</strong>
@@ -777,7 +785,7 @@
             </div>
 
             <div style="text-align:right;flex-shrink:0" class="mono">
-              <div style="font-size:13.5px;font-weight:700;color:var(--accent-crimson)">${song.leaveCount} Tune-Out${song.leaveCount === 1 ? '' : 's'}</div>
+              <div style="font-size:13.5px;font-weight:700;color:var(--accent-crimson)">${song.uniqueIps} Unique IP${song.uniqueIps === 1 ? '' : 's'}</div>
               <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${formatRelativeTime(song.lastDropTs)}</div>
             </div>
           </div>
@@ -1675,23 +1683,40 @@
         ? `<span class="duration-pill" style="font-size:11px;padding:2px 8px;background:hsla(28,95%,54%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,54%,0.35);font-family:var(--font-mono);white-space:nowrap" title="Track progress when left">${formatDurationClock(displayProgressSec)} into song (${formatDurationHuman(displayProgressSec)})</span>`
         : '';
 
+      const isMeAdmin = Boolean(
+        currentName && (
+          currentName.trim().toLowerCase() === 'me' ||
+          currentName.trim().toLowerCase().startsWith('me ') ||
+          currentName.trim().toLowerCase() === 'admin'
+        )
+      );
+
       title.textContent = currentName ? `${currentName} (${ip})` : `Listener Dossier — ${ip}`;
 
       content.innerHTML = `
         <form id="ipAliasForm" style="background:var(--bg-elevated);padding:12px 14px;border-radius:8px;border:1px solid var(--border-strong);display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;align-items:center;justify-content:space-between">
-            <label for="ipFriendlyNameInput" style="font-size:11.5px;font-weight:700;color:var(--accent-amber);letter-spacing:0.04em">FRIENDLY NAME FOR ${escapeHtml(ip)}</label>
+            <label for="ipFriendlyNameInput" style="font-size:11.5px;font-weight:700;color:var(--accent-amber);letter-spacing:0.04em">FRIENDLY NAME &amp; ADMIN TAG FOR ${escapeHtml(ip)}</label>
             <span style="font-size:11px;color:var(--text-muted)">Saved in SQLite</span>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="ipFriendlyNameInput" class="form-input" placeholder="e.g. My HomePod mini, Studio Monitor, DJ Alex..." value="${escapeHtml(currentName)}" style="flex:1" autocomplete="off" />
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="ipFriendlyNameInput" class="form-input" placeholder="e.g. Me, Studio Monitor, DJ Alex..." value="${escapeHtml(currentName)}" style="flex:1;min-width:180px" autocomplete="off" />
             <button type="submit" class="btn btn-primary" style="white-space:nowrap">Save Name</button>
+            <button type="button" id="markAsMeBtn" class="btn" style="white-space:nowrap;background:hsla(210,100%,60%,0.15);color:hsl(210,100%,75%);border-color:hsla(210,100%,60%,0.35)" title="Mark this IP as Station Admin ('Me') so it is completely ignored in track drop-outs and detractor telemetry">👑 Mark as "Me"</button>
             ${
               currentName
                 ? `<button type="button" id="clearIpAliasBtn" class="btn btn-danger-ghost" style="white-space:nowrap">Remove</button>`
                 : ''
             }
           </div>
+          ${
+            isMeAdmin
+              ? `<div style="font-size:11.5px;color:hsl(210,100%,75%);display:flex;align-items:center;gap:6px;margin-top:2px;background:hsla(210,100%,60%,0.1);padding:5px 10px;border-radius:4px;border:1px solid hsla(210,100%,60%,0.25)">
+                  <span>👑</span>
+                  <span><strong>Station Admin IP ("Me"):</strong> Ignored in Detractor Songs and Track Drop-Outs.</span>
+                 </div>`
+              : `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">Tip: Name your own IP <code>Me</code> to automatically exclude your listening sessions from track drop-outs.</div>`
+          }
         </form>
 
         <div style="background:var(--bg-elevated);padding:10px 14px;border-radius:8px;border:1px solid ${isBot ? 'hsla(355,84%,60%,0.4)' : 'var(--border-subtle)'};display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -1826,6 +1851,21 @@
           showToast(newName ? `Named ${ip} "${newName}"` : `Cleared friendly name for ${ip}`);
           title.textContent = newName ? `${newName} (${ip})` : `Listener Dossier — ${ip}`;
           await fetchDashboard();
+        }
+      });
+
+      document.getElementById('markAsMeBtn')?.addEventListener('click', async () => {
+        const saveRes = await fetch(`/api/ip/${encodeURIComponent(ip)}/alias`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ friendlyName: 'Me' }),
+        });
+        const saveData = await saveRes.json();
+        if (saveData.ok) {
+          showToast(`Marked ${ip} as "Me" (Station Admin - Ignored in Track Drop-Outs)`);
+          title.textContent = `Me (${ip})`;
+          await fetchDashboard();
+          openIpInspector(ip);
         }
       });
 
