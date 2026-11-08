@@ -23,7 +23,7 @@ const {
   logCustomEvent,
 } = require('./src/db');
 const { parseUserAgent, parseIcecastClientsPayload } = require('./src/parser');
-const { lookupIp } = require('./src/geoip');
+const { lookupIp, resolveIpHighAccuracy } = require('./src/geoip');
 const { stepSimulation, kickSimulatedClient } = require('./src/simulator');
 const { fetchLiveIcecastTelemetry, kickLiveIcecastClient } = require('./src/icecastClient');
 
@@ -539,9 +539,9 @@ app.post('/api/poll', async (req, res) => {
 });
 
 // API: IP session history & geolocation lookup
-app.get('/api/ip/:ip', (req, res) => {
+app.get('/api/ip/:ip', async (req, res) => {
   const ip = req.params.ip;
-  const geo = lookupIp(ip);
+  const geo = await resolveIpHighAccuracy(ip);
   const history = getIpHistory(geo.ip);
   const activeMatches = latestState.listeners.filter(l => l.ip === geo.ip);
   const currentTrackProgressSec = latestState.sourceMeta?.title

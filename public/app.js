@@ -1524,9 +1524,13 @@
 
         <div class="form-grid-2" style="background:var(--bg-canvas);padding:12px 14px;border-radius:8px;border:1px solid var(--border-subtle)">
           <div>
-            <div style="font-size:11px;color:var(--text-muted)">LOCATION</div>
+            <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;justify-content:space-between">
+              <span>LOCATION &amp; NETWORK</span>
+              <span class="mount-tag" style="font-size:10px;padding:1px 5px">${escapeHtml(geo.source || 'GeoIP')}</span>
+            </div>
             <div style="font-weight:600;margin-top:2px;display:flex;align-items:center;gap:6px">${renderCountryFlag(geo.countryCode, geo.countryName, 18)} <span>${escapeHtml(geo.hasCity && geo.city && geo.city !== geo.countryName && !geo.city.startsWith('Unresolved') ? `${geo.city}, ${geo.countryName}` : `${geo.countryName || 'Unknown'}`)}</span></div>
             <div class="mono" style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">Coords: ${geo.lat}, ${geo.lon} • TZ: ${escapeHtml(geo.timezone)}</div>
+            ${geo.isp ? `<div style="font-size:11.5px;color:var(--accent-amber);margin-top:3px;font-weight:600">📡 ISP: ${escapeHtml(geo.isp)}</div>` : ''}
           </div>
           <div>
             <div style="font-size:11px;color:var(--text-muted)">CUMULATIVE SQLITE STATS</div>

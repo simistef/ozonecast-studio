@@ -102,6 +102,23 @@ db.exec(`
     reason TEXT DEFAULT '',
     created_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS ip_geo_cache (
+    ip TEXT PRIMARY KEY,
+    country_code TEXT NOT NULL,
+    country_name TEXT NOT NULL,
+    region TEXT DEFAULT '',
+    city TEXT DEFAULT '',
+    has_city INTEGER DEFAULT 0,
+    lat REAL DEFAULT 0,
+    lon REAL DEFAULT 0,
+    timezone TEXT DEFAULT 'UTC',
+    isp TEXT DEFAULT '',
+    as_org TEXT DEFAULT '',
+    source TEXT DEFAULT 'ip-api',
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_geo_cache_ip ON ip_geo_cache(ip);
 `);
 
 const DEFAULT_CONFIG = {
@@ -1055,6 +1072,81 @@ function getIpHistory(ip) {
   };
 }
 
+function getCachedGeoIp(ip) {
+  try {
+    const row = db.prepare('SELECT * FROM ip_geo_cache WHERE ip = ?').get(ip);
+    if (!row) return null;
+    return {
+      ip: row.ip,
+      countryCode: row.country_code,
+      countryName: row.country_name,
+      region: row.region,
+      city: row.city,
+      hasCity: Boolean(row.has_city),
+      lat: row.lat,
+      lon: row.lon,
+      timezone: row.timezone,
+      isp: row.isp,
+      asOrg: row.as_org,
+      source: row.source,
+      isLocal: false,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function setCachedGeoIp(data) {
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO ip_geo_cache (
+        ip, country_code, country_name, region, city, has_city, lat, lon, timezone, isp, as_org, source, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(ip) DO UPDATE SET
+        country_code = excluded.country_code,
+        country_name = excluded.country_name,
+        region = excluded.region,
+        city = excluded.city,
+        has_city = excluded.has_city,
+        lat = excluded.lat,
+        lon = excluded.lon,
+        timezone = excluded.timezone,
+        isp = excluded.isp,
+        as_org = excluded.as_org,
+        source = excluded.source,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      data.ip,
+      data.countryCode || 'UN',
+      data.countryName || 'Unknown',
+      data.region || '',
+      data.city || '',
+      data.hasCity ? 1 : 0,
+      Number(data.lat) || 0,
+      Number(data.lon) || 0,
+      data.timezone || 'UTC',
+      data.isp || '',
+      data.asOrg || data.as || '',
+      data.source || 'ip-api',
+      Date.now()
+    );
+
+    // Update active or existing sessions for this IP with higher accuracy city and lat/lon if available
+    if (data.city && data.countryCode && data.countryCode !== 'UN') {
+      try {
+        db.prepare(`
+          UPDATE listener_sessions
+          SET city = ?, country_code = ?, country_name = ?, lat = ?, lon = ?
+          WHERE ip = ? AND (city = '' OR city = country_name OR city LIKE 'Unresolved%')
+        `).run(data.city, data.countryCode, data.countryName, data.lat, data.lon, data.ip);
+      } catch (_) {}
+    }
+  } catch (err) {
+    console.error(`Error saving cached GeoIP for ${data.ip}:`, err.message);
+  }
+}
+
 function logCustomEvent(type, details, ip = '', mount = '/listen') {
   insertEventStmt.run(Date.now(), type, ip, '', '', '', 0, details, mount);
 }
@@ -1078,4 +1170,6 @@ module.exports = {
   isBotIp,
   setBotIp,
   logCustomEvent,
+  getCachedGeoIp,
+  setCachedGeoIp,
 };
