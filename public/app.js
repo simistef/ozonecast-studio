@@ -356,7 +356,7 @@
       } else if (activeBreakdowns && activeBreakdowns.mapLocations) {
         mapLocations = excludeBotsSetting ? activeBreakdowns.mapLocations.filter(l => !l.isBot) : activeBreakdowns.mapLocations;
       } else {
-        mapLocations = excludeBotsSetting ? listeners.filter(l => !l.isBot) : listeners;
+        mapLocations = [];
       }
       window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, mapLocations, mapViewMode, ip => openIpInspector(ip));
     }
@@ -2041,7 +2041,7 @@
             } else if (activeBreakdowns && activeBreakdowns.mapLocations) {
               mapLocations = excludeBotsSetting ? activeBreakdowns.mapLocations.filter(l => !l.isBot) : activeBreakdowns.mapLocations;
             } else {
-              mapLocations = excludeBotsSetting ? dashboardState.listeners.filter(l => !l.isBot) : dashboardState.listeners;
+              mapLocations = [];
             }
             window.OzoneWorldMap.renderWorldMap(svgEl, tooltipEl, mapLocations, mapViewMode, ip => openIpInspector(ip));
           }

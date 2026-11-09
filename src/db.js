@@ -766,47 +766,50 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
 
   const query = `
     SELECT
-      ip,
-      country_code,
-      country_name,
-      city,
-      lat,
-      lon,
-      player,
-      category,
-      os,
-      duration_seconds,
-      is_active
-    FROM listener_sessions
-    WHERE (last_seen >= ? OR ? = 0)
-      AND (? IS NULL OR source_mode = ?)
+      ls.ip,
+      COALESCE(NULLIF(ls.country_code, ''), igc.country_code, 'UN') AS country_code,
+      COALESCE(NULLIF(ls.country_name, ''), igc.country_name, 'Unknown') AS country_name,
+      COALESCE(NULLIF(ls.city, ''), igc.city, '') AS city,
+      COALESCE(NULLIF(ls.lat, 0), igc.lat, 0) AS lat,
+      COALESCE(NULLIF(ls.lon, 0), igc.lon, 0) AS lon,
+      ls.player,
+      ls.category,
+      ls.os,
+      ls.duration_seconds,
+      ls.is_active,
+      fn.friendly_name
+    FROM listener_sessions ls
+    LEFT JOIN ip_geo_cache igc ON ls.ip = igc.ip
+    LEFT JOIN ip_aliases fn ON ls.ip = fn.ip
+    WHERE (ls.last_seen >= ? OR ? = 0)
+      AND (? IS NULL OR ls.source_mode = ?)
       AND (? = 0 OR (
-        category != 'Bot / Ripper'
-        AND ip NOT IN (SELECT ip FROM bot_ips)
-        AND LOWER(user_agent) NOT LIKE '%bot%'
-        AND LOWER(user_agent) NOT LIKE '%crawler%'
-        AND LOWER(user_agent) NOT LIKE '%spider%'
-        AND LOWER(user_agent) NOT LIKE '%streamripper%'
-        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
-        AND LOWER(user_agent) NOT LIKE '%uptime%'
-        AND LOWER(user_agent) NOT LIKE '%robot%'
-        AND LOWER(user_agent) NOT LIKE '%pingdom%'
-        AND LOWER(user_agent) NOT LIKE '%statuscake%'
-        AND LOWER(user_agent) NOT LIKE '%zabbix%'
-        AND LOWER(user_agent) NOT LIKE '%prometheus%'
-        AND LOWER(user_agent) NOT LIKE '%nagios%'
-        AND LOWER(user_agent) NOT LIKE '%probe%'
-        AND LOWER(user_agent) NOT LIKE '%monitor%'
-        AND LOWER(user_agent) NOT LIKE '%radio-browser%'
-        AND LOWER(user_agent) NOT LIKE '%streamcheck%'
-        AND LOWER(user_agent) NOT LIKE '%curl%'
-        AND LOWER(user_agent) NOT LIKE '%python%'
-        AND LOWER(user_agent) NOT LIKE '%go-http%'
-        AND LOWER(user_agent) NOT LIKE '%okhttp%'
-        AND LOWER(user_agent) NOT LIKE '%aiohttp%'
-        AND LOWER(user_agent) NOT LIKE '%node-fetch%'
-        AND LOWER(user_agent) NOT LIKE '%axios%'
-        AND duration_seconds >= 15
+        ls.category != 'Bot / Ripper'
+        AND ls.ip NOT IN (SELECT ip FROM bot_ips)
+        AND LOWER(ls.user_agent) NOT LIKE '%bot%'
+        AND LOWER(ls.user_agent) NOT LIKE '%crawler%'
+        AND LOWER(ls.user_agent) NOT LIKE '%spider%'
+        AND LOWER(ls.user_agent) NOT LIKE '%streamripper%'
+        AND LOWER(ls.user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(ls.user_agent) NOT LIKE '%uptime%'
+        AND LOWER(ls.user_agent) NOT LIKE '%robot%'
+        AND LOWER(ls.user_agent) NOT LIKE '%pingdom%'
+        AND LOWER(ls.user_agent) NOT LIKE '%statuscake%'
+        AND LOWER(ls.user_agent) NOT LIKE '%zabbix%'
+        AND LOWER(ls.user_agent) NOT LIKE '%prometheus%'
+        AND LOWER(ls.user_agent) NOT LIKE '%nagios%'
+        AND LOWER(ls.user_agent) NOT LIKE '%probe%'
+        AND LOWER(ls.user_agent) NOT LIKE '%monitor%'
+        AND LOWER(ls.user_agent) NOT LIKE '%radio-browser%'
+        AND LOWER(ls.user_agent) NOT LIKE '%streamcheck%'
+        AND LOWER(ls.user_agent) NOT LIKE '%curl%'
+        AND LOWER(ls.user_agent) NOT LIKE '%python%'
+        AND LOWER(ls.user_agent) NOT LIKE '%go-http%'
+        AND LOWER(ls.user_agent) NOT LIKE '%okhttp%'
+        AND LOWER(ls.user_agent) NOT LIKE '%aiohttp%'
+        AND LOWER(ls.user_agent) NOT LIKE '%node-fetch%'
+        AND LOWER(ls.user_agent) NOT LIKE '%axios%'
+        AND ls.duration_seconds >= 15
       ))
   `;
 
@@ -895,20 +898,46 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
     osMap.set(osName, (osMap.get(osName) || 0) + 1);
 
     // Map location pins
-    if (!seenMapIps.has(r.ip) && (r.lat || r.lon)) {
+    const latNum = Number(r.lat) || 0;
+    const lonNum = Number(r.lon) || 0;
+    const ccCode = r.country_code || 'UN';
+    if (!seenMapIps.has(r.ip) && (latNum !== 0 || lonNum !== 0 || (ccCode && ccCode !== 'UN' && ccCode !== 'XX'))) {
       seenMapIps.add(r.ip);
+      const isBot = r.category === 'Bot / Ripper';
+      const hasCity = Boolean(
+        r.city &&
+          r.city !== 'Unknown City' &&
+          r.city !== 'Unknown' &&
+          !r.city.startsWith('Unresolved')
+      );
       mapLocations.push({
         ip: r.ip,
-        lat: r.lat,
-        lon: r.lon,
-        city: r.city,
-        countryCode: r.country_code,
-        countryName: r.country_name,
-        player: r.player,
-        category: r.category,
-        os: r.os,
+        lat: latNum,
+        lon: lonNum,
+        city: r.city || '',
+        countryCode: ccCode,
+        countryName: r.country_name || '',
+        player: r.player || 'Other',
+        category: r.category || 'Other',
+        os: r.os || 'Other',
         connectedSeconds: sec,
-        isBot: r.category === 'Bot / Ripper',
+        isBot,
+        friendlyName: r.friendly_name || '',
+        activeStreams: 1,
+        geo: {
+          lat: latNum,
+          lon: lonNum,
+          city: r.city || '',
+          countryCode: ccCode,
+          countryName: r.country_name || '',
+          hasCity,
+        },
+        ua: {
+          player: r.player || 'Other',
+          category: r.category || 'Other',
+          os: r.os || 'Other',
+          isRipper: isBot,
+        },
       });
     }
   }
