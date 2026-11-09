@@ -437,14 +437,17 @@ function schedulePoller() {
 
 // API: Full Dashboard Telemetry Payload
 app.get('/api/dashboard', async (req, res) => {
-  if (latestState.lastUpdatedTs === 0) {
-    await executePollCycle();
-  }
-  const rangeMinutes = Math.min(10080, Math.max(5, parseInt(req.query.rangeMinutes || '60', 10) || 60));
-  const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
-  const modeForHistory = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
+  try {
+    if (latestState.lastUpdatedTs === 0) {
+      await executePollCycle();
+    }
+    const rangeMinutes = Math.min(10080, Math.max(5, parseInt(req.query.rangeMinutes || '60', 10) || 60));
+    const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
+    const modeForHistory = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
+    const config = getConfig();
+    const ipAliases = getIpAliasesMap();
 
-  const allListeners = latestState.listeners || [];
+    const allListeners = latestState.listeners || [];
   const humanListeners = allListeners.filter(l => !l.isBot);
   const botListeners = allListeners.filter(l => l.isBot);
   const effectiveListeners = excludeBots ? humanListeners : allListeners;
@@ -505,8 +508,6 @@ app.get('/api/dashboard', async (req, res) => {
   const timeOfDay = getTimeOfDayProfile(modeForHistory, excludeBots);
   const topReturningListeners = getTopReturningListeners(5, modeForHistory);
   const stats24h = getAggregatedStats(modeForHistory, excludeBots);
-  const config = getConfig();
-  const ipAliases = getIpAliasesMap();
 
   const listenersWithAliases = allListeners.map(l => ({
     ...l,
@@ -578,6 +579,10 @@ app.get('/api/dashboard', async (req, res) => {
     trackChanges,
     recentEvents: stats24h.recentEvents,
   });
+  } catch (err) {
+    console.error('Error in /api/dashboard handler:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // API: Detractor Songs (Tune-Outs & Drop-offs)

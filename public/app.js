@@ -107,8 +107,15 @@
   async function fetchDashboard() {
     try {
       const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}&excludeBots=${excludeBotsSetting ? '1' : '0'}`);
+      if (!res.ok) {
+        console.warn(`Dashboard telemetry HTTP ${res.status}`);
+        return;
+      }
       const data = await res.json();
-      if (!data.ok) return;
+      if (!data.ok) {
+        console.warn('Dashboard telemetry response not ok:', data.error);
+        return;
+      }
       dashboardState = data;
       lastFetchClientTime = Date.now();
       renderAll();
