@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=14" />
+  <link rel="stylesheet" href="/index.css?v=15" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -63,6 +63,22 @@
 
       <!-- Station Settings & Diagnostic Controls -->
       <div class="topbar-actions">
+        <!-- Theme Mode Switcher (Auto / Day / Dark) -->
+        <div class="theme-switch-group" id="themeSwitchGroup" role="radiogroup" aria-label="Theme mode switcher">
+          <button type="button" class="theme-btn active" data-theme-mode="auto" title="Auto: White / Day theme (07:00–19:00), Dark at night">
+            <span class="theme-icon">⏱️</span>
+            <span class="theme-label" id="themeAutoLabel">Auto</span>
+          </button>
+          <button type="button" class="theme-btn" data-theme-mode="light" title="White theme for daytime studio use">
+            <span class="theme-icon">☀️</span>
+            <span class="theme-label">Day</span>
+          </button>
+          <button type="button" class="theme-btn" data-theme-mode="dark" title="Dark theme for night broadcast studio">
+            <span class="theme-icon">🌙</span>
+            <span class="theme-label">Dark</span>
+          </button>
+        </div>
+
         <select id="pollIntervalSelect" class="select-control" aria-label="Polling interval">
           <option value="5">Poll: 5s</option>
           <option value="10" selected>Poll: 10s</option>

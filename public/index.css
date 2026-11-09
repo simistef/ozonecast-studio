@@ -34,6 +34,35 @@
   --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.72);
 }
 
+/* White / Day Theme (Light Mode) Palette */
+[data-theme="light"] {
+  --bg-canvas: hsl(210, 20%, 96%);
+  --bg-surface: hsl(0, 0%, 100%);
+  --bg-surface-elevated: hsl(210, 24%, 98%);
+  --bg-surface-hover: hsl(214, 20%, 93%);
+  --bg-input: hsl(0, 0%, 100%);
+
+  --border-subtle: hsla(215, 25%, 25%, 0.08);
+  --border-strong: hsla(215, 25%, 25%, 0.16);
+  --border-focus: hsl(28, 92%, 50%);
+
+  --text-primary: hsl(215, 30%, 12%);
+  --text-secondary: hsl(215, 18%, 38%);
+  --text-muted: hsl(215, 14%, 54%);
+
+  --accent-amber: hsl(28, 95%, 48%);
+  --accent-amber-soft: hsla(28, 95%, 48%, 0.12);
+  --accent-emerald: hsl(152, 76%, 36%);
+  --accent-emerald-soft: hsla(152, 76%, 36%, 0.12);
+  --accent-cyan: hsl(196, 88%, 42%);
+  --accent-cyan-soft: hsla(196, 88%, 42%, 0.12);
+  --accent-crimson: hsl(355, 84%, 52%);
+  --accent-crimson-soft: hsla(355, 84%, 52%, 0.12);
+
+  --shadow-surface: 0 2px 10px -2px rgba(15, 23, 42, 0.06), 0 1px 3px 0 rgba(15, 23, 42, 0.04);
+  --shadow-modal: 0 20px 45px rgba(15, 23, 42, 0.22);
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -267,6 +296,45 @@ button, input, select, textarea {
 
 .vu-bars.active .vu-bar {
   background: var(--accent-emerald);
+}
+
+/* Theme Switcher in Topbar */
+.theme-switch-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.14s ease;
+  white-space: nowrap;
+}
+
+.theme-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-elevated);
+}
+
+.theme-btn.active {
+  background: var(--accent-amber);
+  color: hsl(214, 28%, 6%);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Topbar Controls */
@@ -1659,4 +1727,142 @@ button, input, select, textarea {
 .bot-category-group .table-scroll {
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
+}
+
+/* ==============================================================================
+   White / Day Theme Component Overrides
+   ============================================================================== */
+[data-theme="light"] body {
+  background-image: radial-gradient(ellipse 90% 45% at 50% -10%, hsla(28, 85%, 55%, 0.05), transparent 70%);
+}
+
+[data-theme="light"] .topbar {
+  background: hsla(0, 0%, 100%, 0.94);
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme="light"] .topbar-subbar {
+  background: hsla(210, 24%, 98%, 0.96);
+  border-top: 1px solid var(--border-subtle);
+}
+
+[data-theme="light"] .btn:hover {
+  background: var(--bg-surface-hover);
+  border-color: hsla(215, 25%, 25%, 0.24);
+}
+
+[data-theme="light"] .btn-primary {
+  background: var(--accent-amber);
+  color: #ffffff;
+  border-color: var(--accent-amber);
+}
+
+[data-theme="light"] .btn-primary:hover {
+  background: hsl(28, 95%, 44%);
+  border-color: hsl(28, 95%, 44%);
+}
+
+[data-theme="light"] .segmented-tabs {
+  background: hsl(210, 18%, 91%);
+}
+
+[data-theme="light"] .seg-btn.active {
+  background: #ffffff;
+  color: var(--accent-amber);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+
+[data-theme="light"] .map-viewport {
+  background: hsl(210, 22%, 91%);
+  border-color: var(--border-strong);
+}
+
+[data-theme="light"] .map-land {
+  fill: hsl(210, 16%, 82%);
+  stroke: hsl(210, 16%, 70%);
+}
+
+[data-theme="light"] .map-land:hover {
+  fill: hsl(210, 20%, 75%);
+}
+
+[data-theme="light"] .map-graticule {
+  stroke: hsla(215, 25%, 25%, 0.07);
+}
+
+[data-theme="light"] .map-pin-core {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+[data-theme="light"] .map-tooltip,
+[data-theme="light"] .chart-tooltip {
+  background: hsla(0, 0%, 100%, 0.98);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
+}
+
+[data-theme="light"] .map-legend {
+  background: hsla(0, 0%, 100%, 0.9);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .modal-backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+[data-theme="light"] .time-bound-badge {
+  background: hsl(210, 18%, 91%);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+[data-theme="light"] .topbar-check-indicator::after {
+  border-color: #ffffff;
+}
+
+[data-theme="light"] .clients-table thead th {
+  background: hsl(210, 20%, 96%);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+[data-theme="light"] .clients-table tbody tr {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-theme="light"] .clients-table tbody tr:hover {
+  background: var(--bg-surface-hover);
+}
+
+[data-theme="light"] .bot-category-header {
+  background: hsl(210, 24%, 98%);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-theme="light"] .bot-category-header:hover {
+  background: hsl(210, 20%, 95%);
+}
+
+[data-theme="light"] .theme-switch-group {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.16);
+}
+
+[data-theme="light"] .theme-btn:hover {
+  background: hsl(214, 20%, 93%);
+}
+
+[data-theme="light"] .theme-btn.active {
+  background: var(--accent-amber);
+  color: #ffffff;
+}
+
+[data-theme="light"] .detractor-progress-bar {
+  background: hsl(210, 18%, 91%);
+}
+
+[data-theme="light"] .dist-track {
+  background: hsl(210, 18%, 91%);
 }

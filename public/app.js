@@ -13,9 +13,58 @@
   let tableCategoryFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
   let tableSortAsc = false;
-  let collapsedBotCategories = new Set(JSON.parse(localStorage.getItem('ozonecast_collapsed_bots') || '[]'));
+  // Bot category groups collapsed by default; expanded groups tracked in localStorage
+  let expandedBotCategories = new Set(JSON.parse(localStorage.getItem('ozonecast_expanded_bots') || '[]'));
+  let themeMode = localStorage.getItem('ozonecast_theme_mode') || 'auto'; // 'auto' | 'light' | 'dark'
   let frontendPollTimer = null;
   let vuAnimationTimer = null;
+
+  function isDaytime() {
+    const hours = new Date().getHours();
+    return hours >= 7 && hours < 19; // 7:00 AM to 6:59 PM is day
+  }
+
+  function resolveEffectiveTheme(mode) {
+    if (mode === 'light') return 'light';
+    if (mode === 'dark') return 'dark';
+    return isDaytime() ? 'light' : 'dark';
+  }
+
+  function applyTheme(mode, notify = false) {
+    themeMode = mode || 'auto';
+    localStorage.setItem('ozonecast_theme_mode', themeMode);
+    const effective = resolveEffectiveTheme(themeMode);
+    document.documentElement.setAttribute('data-theme', effective);
+    document.documentElement.setAttribute('data-theme-mode', themeMode);
+
+    // Update active button state
+    document.querySelectorAll('#themeSwitchGroup .theme-btn').forEach(btn => {
+      const m = btn.getAttribute('data-theme-mode');
+      btn.classList.toggle('active', m === themeMode);
+    });
+
+    const autoLabel = document.getElementById('themeAutoLabel');
+    if (autoLabel) {
+      autoLabel.textContent = `Auto (${isDaytime() ? 'Day' : 'Night'})`;
+    }
+
+    // Redraw historical chart with updated theme colors if data is available
+    if (typeof renderHistoryChart === 'function' && Array.isArray(currentHistoryData) && currentHistoryData.length > 0) {
+      renderHistoryChart(currentHistoryData, currentTrackChanges);
+    }
+
+    if (notify) {
+      const modeNames = {
+        auto: `Auto mode: ${isDaytime() ? '☀️ White / Day theme (07:00–19:00)' : '🌙 Dark / Night theme'}`,
+        light: '☀️ White / Day theme locked',
+        dark: '🌙 Dark / Night theme locked',
+      };
+      showToast(modeNames[themeMode] || `Theme: ${themeMode}`);
+    }
+  }
+
+  // Apply initial theme immediately on script initialization
+  applyTheme(themeMode, false);
 
   // Format seconds into HH:MM:SS or Xh Ym Zs
   function formatDurationClock(seconds) {
@@ -1110,10 +1159,12 @@
     const intervalMax = Math.max(1, ...pts.map(p => Math.max(Number(p.listener_count) || 0, Number(p.unique_ips) || 0)));
     const { maxVal, steps } = getDynamicYScale(intervalMax);
 
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
     // Horizontal reference lines
-    ctx.strokeStyle = 'hsla(210, 20%, 90%, 0.06)';
+    ctx.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.08)' : 'hsla(210, 20%, 90%, 0.06)';
     ctx.lineWidth = 1;
-    ctx.fillStyle = 'hsl(214, 12%, 48%)';
+    ctx.fillStyle = isLight ? '#64748b' : 'hsl(214, 12%, 48%)';
     ctx.font = '11px "JetBrains Mono", monospace';
     ctx.textAlign = 'right';
 
@@ -1136,7 +1187,7 @@
 
     // Draw area fill under listener_count curve
     const grad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-    grad.addColorStop(0, 'hsla(28, 95%, 56%, 0.34)');
+    grad.addColorStop(0, isLight ? 'hsla(28, 95%, 48%, 0.20)' : 'hsla(28, 95%, 56%, 0.34)');
     grad.addColorStop(1, 'hsla(28, 95%, 56%, 0.0)');
 
     ctx.beginPath();
@@ -1330,7 +1381,7 @@
     }
 
     // X-axis time labels
-    ctx.fillStyle = 'hsl(214, 12%, 48%)';
+    ctx.fillStyle = isLight ? '#64748b' : 'hsl(214, 12%, 48%)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     const labelCount = Math.min(6, pts.length);
@@ -1369,7 +1420,7 @@
       // 1. Vertical guideline
       ctx.beginPath();
       ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = 'hsla(210, 20%, 90%, 0.45)';
+      ctx.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.35)' : 'hsla(210, 20%, 90%, 0.45)';
       ctx.lineWidth = 1;
       ctx.moveTo(ptX, padTop);
       ctx.lineTo(ptX, padTop + plotH);
@@ -1784,7 +1835,8 @@
 
     container.innerHTML = categories
       .map(cat => {
-        const isOpen = !collapsedBotCategories.has(cat.id);
+        // Collapsed by default unless explicitly opened by user
+        const isOpen = expandedBotCategories.has(cat.id);
         const liveTag = cat.activeCount > 0
           ? `<span class="bot-cat-live-tag"><span class="status-dot" style="background:#10b981;box-shadow:0 0 6px #10b981;width:6px;height:6px"></span> ${cat.activeCount} Live</span>`
           : '';
@@ -2571,32 +2623,56 @@
         const catId = details.getAttribute('data-category-id');
         if (!catId) return;
         if (details.open) {
-          collapsedBotCategories.delete(catId);
+          expandedBotCategories.add(catId);
         } else {
-          collapsedBotCategories.add(catId);
+          expandedBotCategories.delete(catId);
         }
-        localStorage.setItem('ozonecast_collapsed_bots', JSON.stringify(Array.from(collapsedBotCategories)));
+        localStorage.setItem('ozonecast_expanded_bots', JSON.stringify(Array.from(expandedBotCategories)));
       }, true);
     }
 
     document.getElementById('botsExpandAllBtn')?.addEventListener('click', () => {
-      collapsedBotCategories.clear();
-      localStorage.setItem('ozonecast_collapsed_bots', JSON.stringify([]));
       document.querySelectorAll('#botsAccordion details.bot-category-group').forEach(d => {
+        const catId = d.getAttribute('data-category-id');
+        if (catId) expandedBotCategories.add(catId);
         d.open = true;
       });
+      localStorage.setItem('ozonecast_expanded_bots', JSON.stringify(Array.from(expandedBotCategories)));
       showToast('Expanded all bot categories');
     });
 
     document.getElementById('botsCollapseAllBtn')?.addEventListener('click', () => {
+      expandedBotCategories.clear();
+      localStorage.setItem('ozonecast_expanded_bots', JSON.stringify([]));
       document.querySelectorAll('#botsAccordion details.bot-category-group').forEach(d => {
-        const catId = d.getAttribute('data-category-id');
-        if (catId) collapsedBotCategories.add(catId);
         d.open = false;
       });
-      localStorage.setItem('ozonecast_collapsed_bots', JSON.stringify(Array.from(collapsedBotCategories)));
       showToast('Collapsed all bot categories');
     });
+
+    // Theme Switcher (Auto based on time of day, Day / White, Dark)
+    document.getElementById('themeSwitchGroup')?.addEventListener('click', e => {
+      const btn = e.target.closest('.theme-btn');
+      if (!btn) return;
+      const mode = btn.getAttribute('data-theme-mode');
+      if (mode) applyTheme(mode, true);
+    });
+
+    // Minute ticker to check if time of day changes in Auto theme mode
+    setInterval(() => {
+      if (themeMode === 'auto') {
+        const currentEffective = document.documentElement.getAttribute('data-theme');
+        const expected = resolveEffectiveTheme('auto');
+        if (currentEffective !== expected) {
+          applyTheme('auto', true);
+        } else {
+          const autoLabel = document.getElementById('themeAutoLabel');
+          if (autoLabel) {
+            autoLabel.textContent = `Auto (${isDaytime() ? 'Day' : 'Night'})`;
+          }
+        }
+      }
+    }, 60000);
 
     // Deduplicate Listeners toggle in table toolbar
     const dedupeCb = document.getElementById('dedupeListenersCheckbox');
