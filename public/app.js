@@ -13,6 +13,7 @@
   let tableCategoryFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
   let tableSortAsc = false;
+  let collapsedBotCategories = new Set(JSON.parse(localStorage.getItem('ozonecast_collapsed_bots') || '[]'));
   let frontendPollTimer = null;
   let vuAnimationTimer = null;
 
@@ -1730,12 +1731,12 @@
   }
 
   function renderBotCard(botActivity) {
-    const tableBody = document.getElementById('botsTableBody');
+    const container = document.getElementById('botsAccordion');
     const activeBadge = document.getElementById('botActiveBadge');
     const trackedBadge = document.getElementById('bot24hBadge');
-    if (!tableBody) return;
+    if (!container) return;
 
-    const data = botActivity || { activeCount: 0, total24hCount: 0, bots: [] };
+    const data = botActivity || { activeCount: 0, total24hCount: 0, categories: [], bots: [] };
     const bots = data.bots || [];
     const activeCount = data.activeCount ?? bots.filter(b => b.isActive).length;
     const totalCount = data.total24hCount ?? bots.length;
@@ -1749,90 +1750,162 @@
     }
 
     if (bots.length === 0) {
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="7" class="empty-state" style="text-align:center;padding:28px;color:var(--text-muted)">
-            🛡️ No automated bots, scrapers, or stream rippers detected in the past 24 hours.
-          </td>
-        </tr>
+      container.innerHTML = `
+        <div class="empty-state" style="text-align:center;padding:32px 16px;color:var(--text-muted)">
+          🛡️ No automated bots, scrapers, or stream rippers detected in the past 24 hours.
+        </div>
       `;
       return;
     }
 
-    tableBody.innerHTML = bots
-      .map(b => {
-        const friendlyBadgeHtml = b.friendlyName
-          ? `<button type="button" data-inspect-ip="${escapeHtml(b.ip)}" style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.42);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600;cursor:pointer;text-align:left" title="Click to edit friendly name">${escapeHtml(b.friendlyName)}</button>`
+    let categories = data.categories;
+    if (!categories || categories.length === 0) {
+      const catMap = new Map();
+      for (const b of bots) {
+        const catId = b.categoryGroup?.id || 'other';
+        if (!catMap.has(catId)) {
+          catMap.set(catId, {
+            id: catId,
+            name: b.categoryGroup?.name || 'Automated Probes',
+            icon: b.categoryGroup?.icon || '🤖',
+            description: b.categoryGroup?.description || '',
+            activeCount: 0,
+            totalCount: 0,
+            bots: [],
+          });
+        }
+        const grp = catMap.get(catId);
+        grp.totalCount++;
+        if (b.isActive) grp.activeCount++;
+        grp.bots.push(b);
+      }
+      categories = Array.from(catMap.values());
+    }
+
+    container.innerHTML = categories
+      .map(cat => {
+        const isOpen = !collapsedBotCategories.has(cat.id);
+        const liveTag = cat.activeCount > 0
+          ? `<span class="bot-cat-live-tag"><span class="status-dot" style="background:#10b981;box-shadow:0 0 6px #10b981;width:6px;height:6px"></span> ${cat.activeCount} Live</span>`
           : '';
 
-        const isExplicit = Boolean(b.isExplicitBot);
-        const actionBtnHtml = isExplicit
-          ? `<button type="button" class="btn btn-warning-ghost" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(b.ip)}" data-bot-state="1" title="Flagged explicitly. Click to remove bot classification">🤖 Unmark Bot</button>`
-          : `<button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(b.ip)}" data-bot-state="0" title="Flag this IP as an explicit Bot or Stream Ripper">🤖 Mark Bot</button>`;
+        const rowsHtml = (cat.bots || [])
+          .map(b => {
+            const friendlyBadgeHtml = b.friendlyName
+              ? `<button type="button" data-inspect-ip="${escapeHtml(b.ip)}" style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.42);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600;cursor:pointer;text-align:left" title="Click to edit friendly name">${escapeHtml(b.friendlyName)}</button>`
+              : '';
 
-        const statusPill = b.isActive
-          ? `<span class="status-badge" style="background:hsla(142,71%,45%,0.15);color:var(--accent-emerald);border:1px solid hsla(142,71%,45%,0.35);padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span class="status-dot" style="background:#10b981;box-shadow:0 0 6px #10b981"></span> Live</span>`
-          : `<span style="font-size:11px;color:var(--text-muted);font-weight:500">Offline</span>`;
+            const isExplicit = Boolean(b.isExplicitBot);
+            const actionBtnHtml = isExplicit
+              ? `<button type="button" class="btn btn-warning-ghost" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(b.ip)}" data-bot-state="1" title="Flagged explicitly. Click to remove bot classification">🤖 Unmark Bot</button>`
+              : `<button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(b.ip)}" data-bot-state="0" title="Classified by signature. Click to pin as explicit bot IP">📌 Pin Bot Flag</button>`;
 
-        const sessionsText = b.sessionCount > 0
-          ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${b.sessionCount} session${b.sessionCount === 1 ? '' : 's'} (${formatDurationHuman(b.totalDurationSeconds)})</div>`
-          : '';
+            const statusPill = b.isActive
+              ? `<span class="status-badge" style="background:hsla(142,71%,45%,0.15);color:var(--accent-emerald);border:1px solid hsla(142,71%,45%,0.35);padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span class="status-dot" style="background:#10b981;box-shadow:0 0 6px #10b981"></span> Live</span>`
+              : `<span style="font-size:11px;color:var(--text-muted);font-weight:500">Offline</span>`;
 
-        const locationText = b.city && b.city !== b.countryName && !b.city.startsWith('Unresolved') && b.city !== 'Unknown City' && b.city !== 'Unknown'
-          ? `${escapeHtml(b.city)}, <span style="color:var(--text-secondary)">${escapeHtml(b.countryName || '')}</span>`
-          : escapeHtml(b.countryName || 'Unknown');
+            const sessionsText = b.sessionCount > 0
+              ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${b.sessionCount} session${b.sessionCount === 1 ? '' : 's'} (${formatDurationHuman(b.totalDurationSeconds)})</div>`
+              : '';
 
-        const ispText = b.isp
-          ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${escapeHtml(b.isp)}</div>`
-          : '';
+            const locationText = b.city && b.city !== b.countryName && !b.city.startsWith('Unresolved') && b.city !== 'Unknown City' && b.city !== 'Unknown'
+              ? `${escapeHtml(b.city)}, <span style="color:var(--text-secondary)">${escapeHtml(b.countryName || '')}</span>`
+              : escapeHtml(b.countryName || 'Unknown');
 
-        const lastSeenAgo = b.lastSeen
-          ? formatRelativeTime(b.lastSeen)
-          : 'Unknown';
+            const ispText = b.isp
+              ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${escapeHtml(b.isp)}</div>`
+              : '';
+
+            const lastSeenAgo = b.lastSeen
+              ? formatRelativeTime(b.lastSeen)
+              : 'Unknown';
+
+            return `
+              <tr data-bot-ip-row="${escapeHtml(b.ip)}">
+                <td>
+                  <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
+                    ${friendlyBadgeHtml}
+                    <div class="ip-cell">
+                      <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(b.ip)}" title="Inspect IP history &amp; geolocation">
+                        ${escapeHtml(b.ip)}
+                      </button>
+                      <button type="button" class="copy-ip-btn" data-copy-ip="${escapeHtml(b.ip)}" title="Copy IP address">Copy</button>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    ${renderCountryFlag(b.countryCode, b.countryName, 18)}
+                    <span>${locationText}</span>
+                  </div>
+                  ${ispText}
+                </td>
+                <td class="ua-cell">
+                  <div class="ua-parsed-row" style="font-weight:600">
+                    <span>${escapeHtml(b.player || 'Bot / Ripper')}</span>
+                  </div>
+                  <div class="ua-raw-sub" title="${escapeHtml(b.userAgent)}">${escapeHtml(b.userAgent || 'Unknown')}</div>
+                </td>
+                <td>
+                  <span class="cat-tag ripper">${escapeHtml(b.reason || 'Bot / Ripper')}</span>
+                </td>
+                <td>
+                  ${statusPill}
+                  ${sessionsText}
+                </td>
+                <td>
+                  <span style="font-size:12px;color:var(--text-secondary)" title="${b.lastSeen ? new Date(b.lastSeen).toLocaleString() : ''}">${lastSeenAgo}</span>
+                </td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(b.ip)}" title="View full connection dossier">Dossier</button>
+                    ${actionBtnHtml}
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join('');
 
         return `
-          <tr data-bot-ip-row="${escapeHtml(b.ip)}">
-            <td>
-              <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
-                ${friendlyBadgeHtml}
-                <div class="ip-cell">
-                  <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(b.ip)}" title="Inspect IP history &amp; geolocation">
-                    ${escapeHtml(b.ip)}
-                  </button>
-                  <button type="button" class="copy-ip-btn" data-copy-ip="${escapeHtml(b.ip)}" title="Copy IP address">Copy</button>
+          <details class="bot-category-group" ${isOpen ? 'open' : ''} data-category-id="${escapeHtml(cat.id)}">
+            <summary class="bot-category-header">
+              <div class="bot-category-info">
+                <span class="bot-cat-icon">${cat.icon || '🤖'}</span>
+                <div>
+                  <div class="bot-cat-name">
+                    <span>${escapeHtml(cat.name)}</span>
+                    <span class="bot-cat-count-tag">${cat.totalCount} ${cat.totalCount === 1 ? 'IP' : 'IPs'}</span>
+                    ${liveTag}
+                  </div>
+                  <div class="bot-cat-desc">${escapeHtml(cat.description || '')}</div>
                 </div>
               </div>
-            </td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                ${renderCountryFlag(b.countryCode, b.countryName, 18)}
-                <span>${locationText}</span>
+              <div class="bot-cat-chevron">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
               </div>
-              ${ispText}
-            </td>
-            <td class="ua-cell">
-              <div class="ua-parsed-row" style="font-weight:600">
-                <span>${escapeHtml(b.player || 'Bot / Ripper')}</span>
-              </div>
-              <div class="ua-raw-sub" title="${escapeHtml(b.userAgent)}">${escapeHtml(b.userAgent || 'Unknown')}</div>
-            </td>
-            <td>
-              <span class="cat-tag ripper">${escapeHtml(b.reason || 'Bot / Ripper')}</span>
-            </td>
-            <td>
-              ${statusPill}
-              ${sessionsText}
-            </td>
-            <td>
-              <span style="font-size:12px;color:var(--text-secondary)" title="${b.lastSeen ? new Date(b.lastSeen).toLocaleString() : ''}">${lastSeenAgo}</span>
-            </td>
-            <td>
-              <div style="display:flex;align-items:center;gap:6px">
-                <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(b.ip)}" title="View full connection dossier">Dossier</button>
-                ${actionBtnHtml}
-              </div>
-            </td>
-          </tr>
+            </summary>
+            <div class="table-scroll">
+              <table class="clients-table">
+                <thead>
+                  <tr>
+                    <th>Bot / Scanner IP</th>
+                    <th>Location &amp; ISP</th>
+                    <th>Detected Agent / Player</th>
+                    <th>Category / Reason</th>
+                    <th>Status / Sessions</th>
+                    <th>Last Seen</th>
+                    <th>Admin Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+          </details>
         `;
       })
       .join('');
@@ -2487,7 +2560,43 @@
     };
 
     document.getElementById('clientsTableBody')?.addEventListener('click', handleTableRowAction);
-    document.getElementById('botsTableBody')?.addEventListener('click', handleTableRowAction);
+
+    const botsAccordion = document.getElementById('botsAccordion');
+    if (botsAccordion) {
+      botsAccordion.addEventListener('click', handleTableRowAction);
+      // 'toggle' does not bubble, so listen on capture phase
+      botsAccordion.addEventListener('toggle', e => {
+        const details = e.target.closest('details[data-category-id]');
+        if (!details) return;
+        const catId = details.getAttribute('data-category-id');
+        if (!catId) return;
+        if (details.open) {
+          collapsedBotCategories.delete(catId);
+        } else {
+          collapsedBotCategories.add(catId);
+        }
+        localStorage.setItem('ozonecast_collapsed_bots', JSON.stringify(Array.from(collapsedBotCategories)));
+      }, true);
+    }
+
+    document.getElementById('botsExpandAllBtn')?.addEventListener('click', () => {
+      collapsedBotCategories.clear();
+      localStorage.setItem('ozonecast_collapsed_bots', JSON.stringify([]));
+      document.querySelectorAll('#botsAccordion details.bot-category-group').forEach(d => {
+        d.open = true;
+      });
+      showToast('Expanded all bot categories');
+    });
+
+    document.getElementById('botsCollapseAllBtn')?.addEventListener('click', () => {
+      document.querySelectorAll('#botsAccordion details.bot-category-group').forEach(d => {
+        const catId = d.getAttribute('data-category-id');
+        if (catId) collapsedBotCategories.add(catId);
+        d.open = false;
+      });
+      localStorage.setItem('ozonecast_collapsed_bots', JSON.stringify(Array.from(collapsedBotCategories)));
+      showToast('Collapsed all bot categories');
+    });
 
     // Deduplicate Listeners toggle in table toolbar
     const dedupeCb = document.getElementById('dedupeListenersCheckbox');

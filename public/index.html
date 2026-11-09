@@ -559,29 +559,20 @@
             <span id="bot24hBadge" class="mount-tag">0 tracked IPs (24h)</span>
           </h2>
           <div class="panel-subtitle">
-            Automated crawlers, audio stream rippers, and network health monitors isolated from listener analytics
+            Automated crawlers, audio stream rippers, and network health monitors grouped by signature &amp; category
           </div>
         </div>
+
+        <div class="panel-actions" style="display:flex;align-items:center;gap:8px">
+          <button type="button" id="botsExpandAllBtn" class="btn" style="padding:4px 10px;font-size:12px" title="Expand all bot categories">Expand All</button>
+          <button type="button" id="botsCollapseAllBtn" class="btn" style="padding:4px 10px;font-size:12px" title="Collapse all bot categories">Collapse All</button>
+        </div>
       </div>
-      <div class="table-scroll">
-        <table class="clients-table" id="botsTable">
-          <thead>
-            <tr>
-              <th>Bot / Scanner IP</th>
-              <th>Location &amp; ISP</th>
-              <th>Detected Agent / Player</th>
-              <th>Category / Reason</th>
-              <th>Status / Sessions</th>
-              <th>Last Seen</th>
-              <th>Admin Action</th>
-            </tr>
-          </thead>
-          <tbody id="botsTableBody">
-            <tr>
-              <td colspan="7" class="empty-state">No bot or scraper activity recorded in the past 24 hours.</td>
-            </tr>
-          </tbody>
-        </table>
+
+      <div id="botsAccordion" class="bots-accordion">
+        <div class="empty-state" style="text-align:center;padding:28px;color:var(--text-muted)">
+          🛡️ No automated bots, scrapers, or stream rippers detected in the past 24 hours.
+        </div>
       </div>
     </section>
 

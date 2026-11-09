@@ -254,7 +254,7 @@ const upsertSessionStmt = db.prepare(`
 
 function recordPollResult({
   mount,
-  enrichedListeners,
+  enrichedListeners = [],
   reportedPeak,
   currentTrack,
   trackProgressSec = 0,
@@ -283,7 +283,7 @@ function recordPollResult({
     reportedPeak || listenerCount,
     currentTrack || '',
     bitrate || 128,
-    sourceMode,
+    sourceMode || 'direct',
     humanCount,
     humanUniqueIps
   );
@@ -335,6 +335,16 @@ function recordPollResult({
       currentTrack || '',
       trackProgressSec || 0
     );
+
+    if (client.isBot) {
+      try {
+        db.prepare(`
+          INSERT INTO bot_ips (ip, reason, created_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason
+        `).run(client.ip, client.ua?.player || client.ua?.category || 'Automated Probe', now);
+      } catch (_) {}
+    }
 
     if (!prevMap.has(sessionKey) && prevActiveRows.length > 0) {
       insertEventStmt.run(
@@ -1630,6 +1640,118 @@ function logCustomEvent(type, details, ip = '', mount = '/listen') {
   insertEventStmt.run(Date.now(), type, ip, '', '', '', 0, details, mount);
 }
 
+const BOT_CATEGORY_DEFS = [
+  {
+    id: 'rippers',
+    name: 'Audio Stream Rippers & CLI Downloaders',
+    icon: '⚡',
+    description: 'Streamripper, curl, wget, python, headless HTTP downloaders, and stream recorders',
+  },
+  {
+    id: 'aggregators',
+    name: 'Radio Directory Scrapers & Indexers',
+    icon: '📻',
+    description: 'OnlineRadioBox (HISBot), Radio-Browser, vTuner, IcecastCheck, and directory monitors',
+  },
+  {
+    id: 'monitors',
+    name: 'Uptime & Infrastructure Health Probes',
+    icon: '🩺',
+    description: 'UptimeRobot, Pingdom, StatusCake, Nagios, Zabbix, Prometheus, and periodic stream checkers',
+  },
+  {
+    id: 'crawlers',
+    name: 'Search Engine & AI Web Spiders',
+    icon: '🕷️',
+    description: 'Googlebot, ClaudeBot, GPTBot, Bingbot, Yandex, Ahrefs, Semrush, and web crawlers',
+  },
+  {
+    id: 'manual',
+    name: 'Manually Flagged Bot IPs',
+    icon: '📌',
+    description: 'IP addresses manually classified as bots by the station administrator',
+  },
+  {
+    id: 'other',
+    name: 'Other Automated Probes & Scanners',
+    icon: '🤖',
+    description: 'Unidentified background network probes and automated requests',
+  },
+];
+
+function classifyBotCategory(bot) {
+  const reason = (bot.reason || '').toLowerCase();
+  const ua = (bot.userAgent || '').toLowerCase();
+  const player = (bot.player || '').toLowerCase();
+
+  if (
+    ua.includes('streamripper') ||
+    ua.includes('curl') ||
+    ua.includes('wget') ||
+    ua.includes('python') ||
+    ua.includes('go-http') ||
+    ua.includes('okhttp') ||
+    ua.includes('aiohttp') ||
+    ua.includes('node-fetch') ||
+    ua.includes('axios') ||
+    ua.includes('libwww') ||
+    ua.includes('httpclient') ||
+    player.includes('streamripper') ||
+    player.includes('cli')
+  ) {
+    return BOT_CATEGORY_DEFS[0];
+  }
+  if (
+    ua.includes('onlineradiobox') ||
+    ua.includes('hisbot') ||
+    ua.includes('radio-browser') ||
+    ua.includes('streamcheck') ||
+    ua.includes('icecastcheck') ||
+    ua.includes('vtuner') ||
+    player.includes('onlineradiobox') ||
+    player.includes('directory')
+  ) {
+    return BOT_CATEGORY_DEFS[1];
+  }
+  if (
+    ua.includes('uptime') ||
+    ua.includes('pingdom') ||
+    ua.includes('statuscake') ||
+    ua.includes('zabbix') ||
+    ua.includes('prometheus') ||
+    ua.includes('nagios') ||
+    ua.includes('datadog') ||
+    ua.includes('freshping') ||
+    ua.includes('hetrixtools') ||
+    ua.includes('probe') ||
+    ua.includes('monitor') ||
+    ua.includes('health') ||
+    player.includes('monitor') ||
+    player.includes('probe')
+  ) {
+    return BOT_CATEGORY_DEFS[2];
+  }
+  if (
+    ua.includes('claudebot') ||
+    ua.includes('gptbot') ||
+    ua.includes('googlebot') ||
+    ua.includes('bingbot') ||
+    ua.includes('yandex') ||
+    ua.includes('baidu') ||
+    ua.includes('crawler') ||
+    ua.includes('spider') ||
+    ua.includes('scraper') ||
+    player.includes('crawler') ||
+    player.includes('spider')
+  ) {
+    return BOT_CATEGORY_DEFS[3];
+  }
+  if (bot.isExplicitBot) {
+    return BOT_CATEGORY_DEFS[4];
+  }
+  return BOT_CATEGORY_DEFS[5];
+}
+
 /**
  * Retrieves detected bot activity, automated scrapers, and monitoring probes.
  * Includes explicit bot IPs and user agents classified as bots, crawlers, or rippers.
@@ -1661,10 +1783,38 @@ function getBotActivity(rangeMinutes = 1440, sourceMode = null) {
       s.category = 'Bot / Ripper'
       OR b.ip IS NOT NULL
       OR LOWER(s.user_agent) LIKE '%bot%'
-      OR LOWER(s.user_agent) LIKE '%onlineradiobox%'
       OR LOWER(s.user_agent) LIKE '%crawler%'
       OR LOWER(s.user_agent) LIKE '%spider%'
+      OR LOWER(s.user_agent) LIKE '%scraper%'
       OR LOWER(s.user_agent) LIKE '%streamripper%'
+      OR LOWER(s.user_agent) LIKE '%onlineradiobox%'
+      OR LOWER(s.user_agent) LIKE '%hisbot%'
+      OR LOWER(s.user_agent) LIKE '%uptime%'
+      OR LOWER(s.user_agent) LIKE '%robot%'
+      OR LOWER(s.user_agent) LIKE '%pingdom%'
+      OR LOWER(s.user_agent) LIKE '%statuscake%'
+      OR LOWER(s.user_agent) LIKE '%zabbix%'
+      OR LOWER(s.user_agent) LIKE '%prometheus%'
+      OR LOWER(s.user_agent) LIKE '%nagios%'
+      OR LOWER(s.user_agent) LIKE '%datadog%'
+      OR LOWER(s.user_agent) LIKE '%freshping%'
+      OR LOWER(s.user_agent) LIKE '%hetrixtools%'
+      OR LOWER(s.user_agent) LIKE '%probe%'
+      OR LOWER(s.user_agent) LIKE '%monitor%'
+      OR LOWER(s.user_agent) LIKE '%radio-browser%'
+      OR LOWER(s.user_agent) LIKE '%streamcheck%'
+      OR LOWER(s.user_agent) LIKE '%icecastcheck%'
+      OR LOWER(s.user_agent) LIKE '%vtuner%'
+      OR LOWER(s.user_agent) LIKE '%curl%'
+      OR LOWER(s.user_agent) LIKE '%wget%'
+      OR LOWER(s.user_agent) LIKE '%python%'
+      OR LOWER(s.user_agent) LIKE '%go-http%'
+      OR LOWER(s.user_agent) LIKE '%okhttp%'
+      OR LOWER(s.user_agent) LIKE '%aiohttp%'
+      OR LOWER(s.user_agent) LIKE '%node-fetch%'
+      OR LOWER(s.user_agent) LIKE '%axios%'
+      OR LOWER(s.user_agent) LIKE '%libwww%'
+      OR LOWER(s.user_agent) LIKE '%httpclient%'
     )
   `;
   const params = [];
@@ -1679,7 +1829,7 @@ function getBotActivity(rangeMinutes = 1440, sourceMode = null) {
   sql += `
     GROUP BY s.ip
     ORDER BY is_active DESC, last_seen DESC
-    LIMIT 100
+    LIMIT 150
   `;
 
   let rows = [];
@@ -1728,23 +1878,47 @@ function getBotActivity(rangeMinutes = 1440, sourceMode = null) {
     console.warn('Error adding explicit bot IPs:', err.message);
   }
 
-  const bots = rows.map(r => ({
-    ip: r.ip,
-    friendlyName: r.friendly_name || '',
-    countryCode: r.country_code || 'UN',
-    countryName: r.country_name || 'Unknown',
-    city: r.city || '',
-    isp: r.isp || '',
-    userAgent: r.user_agent || '',
-    player: r.player || 'Bot / Ripper',
-    reason: r.reason || 'Automated Probe',
-    isExplicitBot: Boolean(r.is_explicit_bot),
-    isActive: Boolean(r.is_active),
-    sessionCount: Number(r.session_count) || 0,
-    totalDurationSeconds: Number(r.total_duration_seconds) || 0,
-    firstSeen: r.first_seen,
-    lastSeen: r.last_seen,
-  }));
+  const bots = rows.map(r => {
+    const item = {
+      ip: r.ip,
+      friendlyName: r.friendly_name || '',
+      countryCode: r.country_code || 'UN',
+      countryName: r.country_name || 'Unknown',
+      city: r.city || '',
+      isp: r.isp || '',
+      userAgent: r.user_agent || '',
+      player: r.player || 'Bot / Ripper',
+      reason: r.reason || 'Automated Probe',
+      isExplicitBot: Boolean(r.is_explicit_bot),
+      isActive: Boolean(r.is_active),
+      sessionCount: Number(r.session_count) || 0,
+      totalDurationSeconds: Number(r.total_duration_seconds) || 0,
+      firstSeen: r.first_seen,
+      lastSeen: r.last_seen,
+    };
+    const cat = classifyBotCategory(item);
+    item.categoryGroup = { id: cat.id, name: cat.name, icon: cat.icon };
+    return item;
+  });
+
+  const categoryMap = new Map();
+  for (const def of BOT_CATEGORY_DEFS) {
+    categoryMap.set(def.id, {
+      ...def,
+      activeCount: 0,
+      totalCount: 0,
+      bots: [],
+    });
+  }
+
+  for (const b of bots) {
+    const group = categoryMap.get(b.categoryGroup.id) || categoryMap.get('other');
+    group.totalCount++;
+    if (b.isActive) group.activeCount++;
+    group.bots.push(b);
+  }
+
+  const categories = Array.from(categoryMap.values()).filter(c => c.totalCount > 0);
 
   const activeCount = bots.filter(b => b.isActive).length;
   const total24hCount = bots.length;
@@ -1752,6 +1926,7 @@ function getBotActivity(rangeMinutes = 1440, sourceMode = null) {
   return {
     activeCount,
     total24hCount,
+    categories,
     bots,
   };
 }
@@ -1775,6 +1950,8 @@ module.exports = {
   isBotIp,
   setBotIp,
   getBotActivity,
+  BOT_CATEGORY_DEFS,
+  classifyBotCategory,
   logCustomEvent,
   getCachedGeoIp,
   setCachedGeoIp,

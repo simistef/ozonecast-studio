@@ -21,6 +21,8 @@ const {
   isBotIp,
   setBotIp,
   getBotActivity,
+  BOT_CATEGORY_DEFS,
+  classifyBotCategory,
   logCustomEvent,
   getDetractorSongs,
   getDetractorSummary,
@@ -521,7 +523,7 @@ app.get('/api/dashboard', async (req, res) => {
     }
     for (const bl of botListeners) {
       if (!botActivity.bots.some(b => b.ip === bl.ip)) {
-        botActivity.bots.unshift({
+        const newBot = {
           ip: bl.ip,
           friendlyName: ipAliases[bl.ip]?.friendlyName || '',
           countryCode: bl.geo?.countryCode || 'UN',
@@ -537,10 +539,33 @@ app.get('/api/dashboard', async (req, res) => {
           totalDurationSeconds: bl.connectedSeconds || 0,
           firstSeen: Date.now() - (bl.connectedSeconds * 1000),
           lastSeen: Date.now(),
-        });
+        };
+        const cat = classifyBotCategory(newBot);
+        newBot.categoryGroup = { id: cat.id, name: cat.name, icon: cat.icon };
+        botActivity.bots.unshift(newBot);
       }
     }
     botActivity.total24hCount = botActivity.bots.length;
+
+    // Recompute grouped categories reflecting live bot listeners
+    const catMap = new Map();
+    for (const def of BOT_CATEGORY_DEFS) {
+      catMap.set(def.id, {
+        ...def,
+        activeCount: 0,
+        totalCount: 0,
+        bots: [],
+      });
+    }
+    for (const b of botActivity.bots) {
+      const cat = classifyBotCategory(b);
+      b.categoryGroup = { id: cat.id, name: cat.name, icon: cat.icon };
+      const group = catMap.get(cat.id) || catMap.get('other');
+      group.totalCount++;
+      if (b.isActive) group.activeCount++;
+      group.bots.push(b);
+    }
+    botActivity.categories = Array.from(catMap.values()).filter(c => c.totalCount > 0);
 
     const listenersWithAliases = allListeners.map(l => ({
       ...l,
