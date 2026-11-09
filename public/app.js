@@ -106,7 +106,7 @@
 
   async function fetchDashboard() {
     try {
-      const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}&excludeBots=${excludeBotsSetting ? '1' : '0'}`);
+      const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}`);
       if (!res.ok) {
         console.warn(`Dashboard telemetry HTTP ${res.status}`);
         return;
@@ -292,14 +292,10 @@
 
     const botFilterBadge = document.getElementById('kpiBotsFilterBadge');
     if (botFilterBadge) {
-      if (excludeBotsSetting) {
-        const botCount = kpis.botListenersCount || 0;
-        botFilterBadge.textContent = botCount > 0 ? `🤖 ${botCount} Excluded` : '🤖 Excluded';
-        botFilterBadge.title = `${botCount} flagged bot/ripper connections excluded from telemetry statistics`;
-        botFilterBadge.classList.remove('hidden');
-      } else {
-        botFilterBadge.classList.add('hidden');
-      }
+      const botCount = kpis.botListenersCount || 0;
+      botFilterBadge.textContent = botCount > 0 ? `🤖 ${botCount} Bot${botCount === 1 ? '' : 's'} Ignored` : '🤖 Bots Ignored';
+      botFilterBadge.title = `${botCount} flagged bot/crawler/probe connections isolated from listener analytics`;
+      botFilterBadge.classList.remove('hidden');
     }
 
     document.getElementById('capacityPctBadge').textContent = `${capPct}% cap`;
@@ -353,15 +349,15 @@
     updateScopeBadges();
     const activeBreakdowns = getActiveBreakdowns() || breakdowns;
 
-    // 3. World Map & Geo Distribution
+    // 3. World Map & Geo Distribution (human listeners only)
     const svgEl = document.getElementById('worldMapSvg');
     const tooltipEl = document.getElementById('mapTooltip');
     if (window.OzoneWorldMap && svgEl) {
       let mapLocations = [];
       if (breakdownScopeMode === 'live') {
-        mapLocations = excludeBotsSetting ? listeners.filter(l => !l.isBot) : listeners;
+        mapLocations = (listeners || []).filter(l => !l.isBot);
       } else if (activeBreakdowns && activeBreakdowns.mapLocations) {
-        mapLocations = excludeBotsSetting ? activeBreakdowns.mapLocations.filter(l => !l.isBot) : activeBreakdowns.mapLocations;
+        mapLocations = activeBreakdowns.mapLocations.filter(l => !l.isBot);
       } else {
         mapLocations = [];
       }
@@ -388,6 +384,9 @@
     // 6. Active Clients Table
     document.getElementById('tableEndpointLabel').textContent = connection.endpointUrl;
     renderClientsTable();
+
+    // 7. Detected Bots, Scrapers & Monitoring Probes Card
+    renderBotCard(dashboardState.botActivity);
   }
 
   function renderTimeOfDayAndConnectedStats(timeOfDay, kpis) {
@@ -1730,6 +1729,115 @@
       .join('');
   }
 
+  function renderBotCard(botActivity) {
+    const tableBody = document.getElementById('botsTableBody');
+    const activeBadge = document.getElementById('botActiveBadge');
+    const trackedBadge = document.getElementById('bot24hBadge');
+    if (!tableBody) return;
+
+    const data = botActivity || { activeCount: 0, total24hCount: 0, bots: [] };
+    const bots = data.bots || [];
+    const activeCount = data.activeCount ?? bots.filter(b => b.isActive).length;
+    const totalCount = data.total24hCount ?? bots.length;
+
+    if (activeBadge) {
+      activeBadge.textContent = `${activeCount} Active Live`;
+      activeBadge.className = activeCount > 0 ? 'time-bound-badge live' : 'time-bound-badge';
+    }
+    if (trackedBadge) {
+      trackedBadge.textContent = `${totalCount} tracked IP${totalCount === 1 ? '' : 's'} (24h)`;
+    }
+
+    if (bots.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="7" class="empty-state" style="text-align:center;padding:28px;color:var(--text-muted)">
+            🛡️ No automated bots, scrapers, or stream rippers detected in the past 24 hours.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tableBody.innerHTML = bots
+      .map(b => {
+        const friendlyBadgeHtml = b.friendlyName
+          ? `<button type="button" data-inspect-ip="${escapeHtml(b.ip)}" style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.42);border-radius:4px;padding:2px 7px;font-size:12px;font-weight:600;cursor:pointer;text-align:left" title="Click to edit friendly name">${escapeHtml(b.friendlyName)}</button>`
+          : '';
+
+        const isExplicit = Boolean(b.isExplicitBot);
+        const actionBtnHtml = isExplicit
+          ? `<button type="button" class="btn btn-warning-ghost" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(b.ip)}" data-bot-state="1" title="Flagged explicitly. Click to remove bot classification">🤖 Unmark Bot</button>`
+          : `<button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-bot-ip="${escapeHtml(b.ip)}" data-bot-state="0" title="Flag this IP as an explicit Bot or Stream Ripper">🤖 Mark Bot</button>`;
+
+        const statusPill = b.isActive
+          ? `<span class="status-badge" style="background:hsla(142,71%,45%,0.15);color:var(--accent-emerald);border:1px solid hsla(142,71%,45%,0.35);padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:5px"><span class="status-dot" style="background:#10b981;box-shadow:0 0 6px #10b981"></span> Live</span>`
+          : `<span style="font-size:11px;color:var(--text-muted);font-weight:500">Offline</span>`;
+
+        const sessionsText = b.sessionCount > 0
+          ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${b.sessionCount} session${b.sessionCount === 1 ? '' : 's'} (${formatDurationHuman(b.totalDurationSeconds)})</div>`
+          : '';
+
+        const locationText = b.city && b.city !== b.countryName && !b.city.startsWith('Unresolved') && b.city !== 'Unknown City' && b.city !== 'Unknown'
+          ? `${escapeHtml(b.city)}, <span style="color:var(--text-secondary)">${escapeHtml(b.countryName || '')}</span>`
+          : escapeHtml(b.countryName || 'Unknown');
+
+        const ispText = b.isp
+          ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;font-family:var(--font-mono)">${escapeHtml(b.isp)}</div>`
+          : '';
+
+        const lastSeenAgo = b.lastSeen
+          ? formatRelativeTime(b.lastSeen)
+          : 'Unknown';
+
+        return `
+          <tr data-bot-ip-row="${escapeHtml(b.ip)}">
+            <td>
+              <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start">
+                ${friendlyBadgeHtml}
+                <div class="ip-cell">
+                  <button type="button" class="ip-link" data-inspect-ip="${escapeHtml(b.ip)}" title="Inspect IP history &amp; geolocation">
+                    ${escapeHtml(b.ip)}
+                  </button>
+                  <button type="button" class="copy-ip-btn" data-copy-ip="${escapeHtml(b.ip)}" title="Copy IP address">Copy</button>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${renderCountryFlag(b.countryCode, b.countryName, 18)}
+                <span>${locationText}</span>
+              </div>
+              ${ispText}
+            </td>
+            <td class="ua-cell">
+              <div class="ua-parsed-row" style="font-weight:600">
+                <span>${escapeHtml(b.player || 'Bot / Ripper')}</span>
+              </div>
+              <div class="ua-raw-sub" title="${escapeHtml(b.userAgent)}">${escapeHtml(b.userAgent || 'Unknown')}</div>
+            </td>
+            <td>
+              <span class="cat-tag ripper">${escapeHtml(b.reason || 'Bot / Ripper')}</span>
+            </td>
+            <td>
+              ${statusPill}
+              ${sessionsText}
+            </td>
+            <td>
+              <span style="font-size:12px;color:var(--text-secondary)" title="${b.lastSeen ? new Date(b.lastSeen).toLocaleString() : ''}">${lastSeenAgo}</span>
+            </td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px">
+                <button type="button" class="btn" style="padding:4px 8px;font-size:11.5px" data-inspect-ip="${escapeHtml(b.ip)}" title="View full connection dossier">Dossier</button>
+                ${actionBtnHtml}
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+  }
+
   // Live 1-second duration ticker so Connected Time updates smoothly every second
   setInterval(() => {
     if (!dashboardState) return;
@@ -2044,9 +2152,9 @@
           if (window.OzoneWorldMap && svgEl) {
             let mapLocations = [];
             if (scope === 'live') {
-              mapLocations = excludeBotsSetting ? dashboardState.listeners.filter(l => !l.isBot) : dashboardState.listeners;
+              mapLocations = (dashboardState.listeners || []).filter(l => !l.isBot);
             } else if (activeBreakdowns && activeBreakdowns.mapLocations) {
-              mapLocations = excludeBotsSetting ? activeBreakdowns.mapLocations.filter(l => !l.isBot) : activeBreakdowns.mapLocations;
+              mapLocations = activeBreakdowns.mapLocations.filter(l => !l.isBot);
             } else {
               mapLocations = [];
             }
@@ -2285,8 +2393,8 @@
       });
     });
 
-    // Table row actions delegation (Inspect IP, Copy IP, Kick Client)
-    document.getElementById('clientsTableBody')?.addEventListener('click', async e => {
+    // Table row actions delegation (Inspect IP, Copy IP, Kick Client, Mark/Unmark Bot)
+    const handleTableRowAction = async e => {
       const inspectBtn = e.target.closest('[data-inspect-ip]');
       if (inspectBtn) {
         openIpInspector(inspectBtn.getAttribute('data-inspect-ip'));
@@ -2376,7 +2484,10 @@
           kickBtn.textContent = 'Kick';
         }
       }
-    });
+    };
+
+    document.getElementById('clientsTableBody')?.addEventListener('click', handleTableRowAction);
+    document.getElementById('botsTableBody')?.addEventListener('click', handleTableRowAction);
 
     // Deduplicate Listeners toggle in table toolbar
     const dedupeCb = document.getElementById('dedupeListenersCheckbox');
@@ -2397,7 +2508,7 @@
       });
     }
 
-    // Exclude Bots checkbox toggle next to Icecast Server button
+    // Exclude Bots checkbox toggle in Connected Clients toolbar
     const excludeBotsCb = document.getElementById('excludeBotsCheckbox');
     const excludeBotsWrap = document.getElementById('excludeBotsWrap');
     if (excludeBotsCb) {
@@ -2409,10 +2520,10 @@
         if (excludeBotsWrap) excludeBotsWrap.classList.toggle('checked', excludeBotsSetting);
         showToast(
           excludeBotsSetting
-            ? '🤖 Flagged bots excluded from all telemetry statistics & graphs'
-            : '👥 Including all listeners and bots in telemetry statistics'
+            ? '🤖 Flagged bots hidden from connected clients table'
+            : '👥 Flagged bots shown in connected clients table'
         );
-        fetchDashboard();
+        renderClientsTable();
       });
     }
 

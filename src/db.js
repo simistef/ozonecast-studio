@@ -1630,6 +1630,132 @@ function logCustomEvent(type, details, ip = '', mount = '/listen') {
   insertEventStmt.run(Date.now(), type, ip, '', '', '', 0, details, mount);
 }
 
+/**
+ * Retrieves detected bot activity, automated scrapers, and monitoring probes.
+ * Includes explicit bot IPs and user agents classified as bots, crawlers, or rippers.
+ */
+function getBotActivity(rangeMinutes = 1440, sourceMode = null) {
+  const since = rangeMinutes > 0 ? Date.now() - rangeMinutes * 60 * 1000 : 0;
+  let sql = `
+    SELECT
+      s.ip,
+      MAX(s.last_seen) as last_seen,
+      MIN(s.first_seen) as first_seen,
+      COUNT(*) as session_count,
+      SUM(s.duration_seconds) as total_duration_seconds,
+      MAX(s.is_active) as is_active,
+      COALESCE(MAX(a.friendly_name), '') as friendly_name,
+      COALESCE(MAX(g.country_code), MAX(s.country_code), 'UN') as country_code,
+      COALESCE(MAX(g.country_name), MAX(s.country_name), 'Unknown') as country_name,
+      COALESCE(MAX(g.city), MAX(s.city), '') as city,
+      COALESCE(MAX(g.isp), '') as isp,
+      MAX(s.user_agent) as user_agent,
+      MAX(s.player) as player,
+      COALESCE(MAX(b.reason), MAX(s.player), 'Automated Probe') as reason,
+      CASE WHEN MAX(b.ip) IS NOT NULL THEN 1 ELSE 0 END as is_explicit_bot
+    FROM listener_sessions s
+    LEFT JOIN bot_ips b ON s.ip = b.ip
+    LEFT JOIN ip_geo_cache g ON s.ip = g.ip
+    LEFT JOIN ip_aliases a ON s.ip = a.ip
+    WHERE (
+      s.category = 'Bot / Ripper'
+      OR b.ip IS NOT NULL
+      OR LOWER(s.user_agent) LIKE '%bot%'
+      OR LOWER(s.user_agent) LIKE '%onlineradiobox%'
+      OR LOWER(s.user_agent) LIKE '%crawler%'
+      OR LOWER(s.user_agent) LIKE '%spider%'
+      OR LOWER(s.user_agent) LIKE '%streamripper%'
+    )
+  `;
+  const params = [];
+  if (since > 0) {
+    sql += ' AND s.last_seen >= ?';
+    params.push(since);
+  }
+  if (sourceMode) {
+    sql += ' AND s.source_mode = ?';
+    params.push(sourceMode);
+  }
+  sql += `
+    GROUP BY s.ip
+    ORDER BY is_active DESC, last_seen DESC
+    LIMIT 100
+  `;
+
+  let rows = [];
+  try {
+    rows = db.prepare(sql).all(...params);
+  } catch (err) {
+    console.warn('Error in getBotActivity query:', err.message);
+  }
+
+  try {
+    const explicitBots = db.prepare(`
+      SELECT b.ip, b.reason, b.created_at,
+        COALESCE(a.friendly_name, '') as friendly_name,
+        COALESCE(g.country_code, 'UN') as country_code,
+        COALESCE(g.country_name, 'Unknown') as country_name,
+        COALESCE(g.city, '') as city,
+        COALESCE(g.isp, '') as isp
+      FROM bot_ips b
+      LEFT JOIN ip_geo_cache g ON b.ip = g.ip
+      LEFT JOIN ip_aliases a ON b.ip = a.ip
+    `).all();
+
+    const existingIps = new Set(rows.map(r => r.ip));
+    for (const eb of explicitBots) {
+      if (!existingIps.has(eb.ip)) {
+        rows.push({
+          ip: eb.ip,
+          last_seen: eb.created_at,
+          first_seen: eb.created_at,
+          session_count: 0,
+          total_duration_seconds: 0,
+          is_active: 0,
+          friendly_name: eb.friendly_name,
+          country_code: eb.country_code,
+          country_name: eb.country_name,
+          city: eb.city,
+          isp: eb.isp,
+          user_agent: 'Manually Flagged Bot',
+          player: 'Bot / Scanner',
+          reason: eb.reason || 'Manually flagged as bot',
+          is_explicit_bot: 1,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Error adding explicit bot IPs:', err.message);
+  }
+
+  const bots = rows.map(r => ({
+    ip: r.ip,
+    friendlyName: r.friendly_name || '',
+    countryCode: r.country_code || 'UN',
+    countryName: r.country_name || 'Unknown',
+    city: r.city || '',
+    isp: r.isp || '',
+    userAgent: r.user_agent || '',
+    player: r.player || 'Bot / Ripper',
+    reason: r.reason || 'Automated Probe',
+    isExplicitBot: Boolean(r.is_explicit_bot),
+    isActive: Boolean(r.is_active),
+    sessionCount: Number(r.session_count) || 0,
+    totalDurationSeconds: Number(r.total_duration_seconds) || 0,
+    firstSeen: r.first_seen,
+    lastSeen: r.last_seen,
+  }));
+
+  const activeCount = bots.filter(b => b.isActive).length;
+  const total24hCount = bots.length;
+
+  return {
+    activeCount,
+    total24hCount,
+    bots,
+  };
+}
+
 module.exports = {
   db,
   getConfig,
@@ -1648,6 +1774,7 @@ module.exports = {
   getBotIpsSet,
   isBotIp,
   setBotIp,
+  getBotActivity,
   logCustomEvent,
   getCachedGeoIp,
   setCachedGeoIp,

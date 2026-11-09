@@ -20,6 +20,7 @@ const {
   getBotIpsSet,
   isBotIp,
   setBotIp,
+  getBotActivity,
   logCustomEvent,
   getDetractorSongs,
   getDetractorSummary,
@@ -448,137 +449,170 @@ app.get('/api/dashboard', async (req, res) => {
     const ipAliases = getIpAliasesMap();
 
     const allListeners = latestState.listeners || [];
-  const humanListeners = allListeners.filter(l => !l.isBot);
-  const botListeners = allListeners.filter(l => l.isBot);
-  const effectiveListeners = excludeBots ? humanListeners : allListeners;
+    const humanListeners = allListeners.filter(l => !l.isBot);
+    const botListeners = allListeners.filter(l => l.isBot);
 
-  // Deduplicate listeners by device/player:
-  // Same IP and player/user-agent count as 1 listener,
-  // unless under the same IP there are two separate players or agents.
-  const deduplicatedEffective = deduplicateListenersByDevice(effectiveListeners);
-  const deduplicatedHuman = deduplicateListenersByDevice(humanListeners);
+    // Deduplicate human listeners by device/player:
+    // Same IP and player/user-agent count as 1 listener,
+    // unless under the same IP there are two separate players or agents.
+    const deduplicatedHuman = deduplicateListenersByDevice(humanListeners);
 
-  const breakdownsLive = computeBreakdowns(deduplicatedEffective);
-  const breakdowns24h = getHistoricalBreakdowns(1440, modeForHistory, excludeBots);
-  const breakdowns7d = getHistoricalBreakdowns(10080, modeForHistory, excludeBots);
-  const breakdownsAll = getHistoricalBreakdowns(0, modeForHistory, excludeBots);
+    // All dashboard analytics, historical charts, geographic distributions, world map pins,
+    // top-line KPIs, and time-of-day stats ALWAYS measure genuine human listeners only.
+    const breakdownsLive = computeBreakdowns(deduplicatedHuman);
+    const breakdowns24h = getHistoricalBreakdowns(1440, modeForHistory, true);
+    const breakdowns7d = getHistoricalBreakdowns(10080, modeForHistory, true);
+    const breakdownsAll = getHistoricalBreakdowns(0, modeForHistory, true);
 
-  const breakdownsByPeriod = {
-    live: {
-      ...breakdownsLive,
-      mapLocations: deduplicatedEffective.map(l => ({
-        ip: l.ip,
-        lat: l.geo?.lat ?? l.lat,
-        lon: l.geo?.lon ?? l.lon,
-        city: l.geo?.city || l.city || '',
-        countryCode: l.geo?.countryCode || l.countryCode || 'UN',
-        countryName: l.geo?.countryName || l.countryName || '',
-        player: l.ua?.player || l.player || 'Other',
-        category: l.ua?.category || l.category || 'Other',
-        os: l.ua?.os || l.os || 'Other',
-        connectedSeconds: l.connectedSeconds,
-        isBot: l.isBot,
-        activeStreams: l.streamCount || 1,
-        friendlyName: ipAliases[l.ip]?.friendlyName || '',
-        geo: l.geo || {
-          lat: l.lat,
-          lon: l.lon,
-          city: l.city,
-          countryCode: l.countryCode,
-          countryName: l.countryName,
-          hasCity: Boolean(l.city),
-        },
-        ua: l.ua || {
-          player: l.player,
-          category: l.category,
-          os: l.os,
-          isRipper: l.isBot,
-        },
-      })),
-      detractorSongs: breakdowns24h.detractorSongs,
-      detractorSummary: breakdowns24h.detractorSummary,
-    },
-    '24h': breakdowns24h,
-    '7d': breakdowns7d,
-    all: breakdownsAll,
-  };
+    const breakdownsByPeriod = {
+      live: {
+        ...breakdownsLive,
+        mapLocations: deduplicatedHuman.map(l => ({
+          ip: l.ip,
+          lat: l.geo?.lat ?? l.lat,
+          lon: l.geo?.lon ?? l.lon,
+          city: l.geo?.city || l.city || '',
+          countryCode: l.geo?.countryCode || l.countryCode || 'UN',
+          countryName: l.geo?.countryName || l.countryName || '',
+          player: l.ua?.player || l.player || 'Other',
+          category: l.ua?.category || l.category || 'Other',
+          os: l.ua?.os || l.os || 'Other',
+          connectedSeconds: l.connectedSeconds,
+          isBot: false,
+          activeStreams: l.streamCount || 1,
+          friendlyName: ipAliases[l.ip]?.friendlyName || '',
+          geo: l.geo || {
+            lat: l.lat,
+            lon: l.lon,
+            city: l.city,
+            countryCode: l.countryCode,
+            countryName: l.countryName,
+            hasCity: Boolean(l.city),
+          },
+          ua: l.ua || {
+            player: l.player,
+            category: l.category,
+            os: l.os,
+            isRipper: false,
+          },
+        })),
+        detractorSongs: breakdowns24h.detractorSongs,
+        detractorSummary: breakdowns24h.detractorSummary,
+      },
+      '24h': breakdowns24h,
+      '7d': breakdowns7d,
+      all: breakdownsAll,
+    };
 
-  const history = getHistoricalSeries(rangeMinutes, modeForHistory, excludeBots);
-  const trackChanges = getHistoricalTrackChanges(rangeMinutes, modeForHistory);
-  const timeOfDay = getTimeOfDayProfile(modeForHistory, excludeBots);
-  const topReturningListeners = getTopReturningListeners(5, modeForHistory);
-  const stats24h = getAggregatedStats(modeForHistory, excludeBots);
+    const history = getHistoricalSeries(rangeMinutes, modeForHistory, true);
+    const trackChanges = getHistoricalTrackChanges(rangeMinutes, modeForHistory);
+    const timeOfDay = getTimeOfDayProfile(modeForHistory, true);
+    const topReturningListeners = getTopReturningListeners(5, modeForHistory);
+    const stats24h = getAggregatedStats(modeForHistory, true);
 
-  const listenersWithAliases = allListeners.map(l => ({
-    ...l,
-    friendlyName: ipAliases[l.ip]?.friendlyName || '',
-    notes: ipAliases[l.ip]?.notes || '',
-  }));
+    // Collect bot activity for dedicated bottom bot card
+    const botActivity = getBotActivity(1440, modeForHistory);
+    const activeBotIps = new Set(botListeners.map(b => b.ip));
+    botActivity.activeCount = Math.max(botActivity.activeCount, botListeners.length);
+    for (const b of botActivity.bots) {
+      if (activeBotIps.has(b.ip)) {
+        b.isActive = true;
+      }
+    }
+    for (const bl of botListeners) {
+      if (!botActivity.bots.some(b => b.ip === bl.ip)) {
+        botActivity.bots.unshift({
+          ip: bl.ip,
+          friendlyName: ipAliases[bl.ip]?.friendlyName || '',
+          countryCode: bl.geo?.countryCode || 'UN',
+          countryName: bl.geo?.countryName || 'Unknown',
+          city: bl.geo?.city || '',
+          isp: bl.geo?.isp || '',
+          userAgent: bl.userAgent || bl.ua?.raw || '',
+          player: bl.ua?.player || 'Bot / Ripper',
+          reason: 'Active Live Stream Connection',
+          isExplicitBot: Boolean(bl.isManualBot),
+          isActive: true,
+          sessionCount: 1,
+          totalDurationSeconds: bl.connectedSeconds || 0,
+          firstSeen: Date.now() - (bl.connectedSeconds * 1000),
+          lastSeen: Date.now(),
+        });
+      }
+    }
+    botActivity.total24hCount = botActivity.bots.length;
 
-  res.json({
-    ok: true,
-    timestamp: latestState.lastUpdatedTs,
-    excludeBots,
-    connection: {
-      activeSourceMode: latestState.activeSourceMode,
-      configuredMode: latestState.configuredMode,
-      status: latestState.connectionStatus,
-      error: latestState.lastConnectionError,
-      latencyMs: latestState.lastProbeLatencyMs,
-      endpointUrl: latestState.endpointUrl,
-      baseUrl: latestState.baseUrl,
-      mount: latestState.mount,
-      pollIntervalSec: config.pollIntervalSec,
-    },
-    stream: latestState.sourceMeta,
-    kpis: {
-      currentListeners: deduplicatedEffective.length,
-      totalListenersRaw: allListeners.length,
-      humanListenersCount: deduplicatedHuman.length,
-      humanStreamsCount: humanListeners.length,
-      totalStreams: effectiveListeners.length,
-      botListenersCount: botListeners.length,
-      excludeBots,
-      reportedListeners: excludeBots ? deduplicatedHuman.length : latestState.reportedCount,
-      uniqueIps: breakdownsLive.uniqueIps,
-      duplicateConnections: effectiveListeners.length - deduplicatedEffective.length,
-      avgSessionDurationSec: breakdownsLive.avgSessionDurationSec,
-      medianSessionDurationSec: breakdownsLive.medianSessionDurationSec,
-      p90SessionDurationSec: breakdownsLive.p90SessionDurationSec,
-      longestSessionSec: breakdownsLive.longestSessionSec,
-      shortestSessionSec: breakdownsLive.shortestSessionSec,
-      totalActiveListeningHours: breakdownsLive.totalActiveListeningHours,
-      peak24h: Math.max(stats24h.peak24h, deduplicatedEffective.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
-      peak24hTs: stats24h.peak24hTs,
-      allTimePeak: Math.max(stats24h.allTimePeak, deduplicatedEffective.length, excludeBots ? 0 : (latestState.sourceMeta.listenerPeak || 0)),
-      totalSessions24h: stats24h.totalSessions24h,
-      uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdownsLive.uniqueIps),
-      uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdownsLive.countries.length),
-      totalListeningHours24h: Math.max(stats24h.totalListeningHours24h, breakdownsLive.totalActiveListeningHours),
-      returningListenerCount: stats24h.returningListenerCount,
-      returningMinAvgSec: config.returningMinAvgSec ?? 60,
-      returningExcludeBots: config.returningExcludeBots !== false,
-      maxCapacity: latestState.sourceMeta.maxListeners || config.maxListenersCapacity || 500,
-    },
-    listeners: listenersWithAliases,
-    ipAliases,
-    breakdowns: {
-      countries: breakdownsLive.countries,
-      cities: breakdownsLive.cities,
-      players: breakdownsLive.players,
-      categories: breakdownsLive.categories,
-      platforms: breakdownsLive.platforms,
-      durationBuckets: breakdownsLive.durationBuckets,
-    },
-    breakdownsByPeriod,
-    detractorSongs: breakdowns24h.detractorSongs || getDetractorSongs(1440, modeForHistory, excludeBots, 10),
-    detractorSummary: breakdowns24h.detractorSummary || getDetractorSummary(1440, modeForHistory, excludeBots),
-    timeOfDay,
-    topReturningListeners,
-    history,
-    trackChanges,
-    recentEvents: stats24h.recentEvents,
-  });
+    const listenersWithAliases = allListeners.map(l => ({
+      ...l,
+      friendlyName: ipAliases[l.ip]?.friendlyName || '',
+      notes: ipAliases[l.ip]?.notes || '',
+    }));
+
+    res.json({
+      ok: true,
+      timestamp: latestState.lastUpdatedTs,
+      excludeBots: true,
+      connection: {
+        activeSourceMode: latestState.activeSourceMode,
+        configuredMode: latestState.configuredMode,
+        status: latestState.connectionStatus,
+        error: latestState.lastConnectionError,
+        latencyMs: latestState.lastProbeLatencyMs,
+        endpointUrl: latestState.endpointUrl,
+        baseUrl: latestState.baseUrl,
+        mount: latestState.mount,
+        pollIntervalSec: config.pollIntervalSec,
+      },
+      stream: latestState.sourceMeta,
+      kpis: {
+        currentListeners: deduplicatedHuman.length,
+        totalListenersRaw: allListeners.length,
+        humanListenersCount: deduplicatedHuman.length,
+        humanStreamsCount: humanListeners.length,
+        totalStreams: humanListeners.length,
+        botListenersCount: botListeners.length,
+        excludeBots: true,
+        reportedListeners: deduplicatedHuman.length,
+        uniqueIps: breakdownsLive.uniqueIps,
+        duplicateConnections: Math.max(0, humanListeners.length - deduplicatedHuman.length),
+        avgSessionDurationSec: breakdownsLive.avgSessionDurationSec,
+        medianSessionDurationSec: breakdownsLive.medianSessionDurationSec,
+        p90SessionDurationSec: breakdownsLive.p90SessionDurationSec,
+        longestSessionSec: breakdownsLive.longestSessionSec,
+        shortestSessionSec: breakdownsLive.shortestSessionSec,
+        totalActiveListeningHours: breakdownsLive.totalActiveListeningHours,
+        peak24h: Math.max(stats24h.peak24h, deduplicatedHuman.length),
+        peak24hTs: stats24h.peak24hTs,
+        allTimePeak: Math.max(stats24h.allTimePeak, deduplicatedHuman.length),
+        totalSessions24h: stats24h.totalSessions24h,
+        uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdownsLive.uniqueIps),
+        uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdownsLive.countries.length),
+        totalListeningHours24h: Math.max(stats24h.totalListeningHours24h, breakdownsLive.totalActiveListeningHours),
+        returningListenerCount: stats24h.returningListenerCount,
+        returningMinAvgSec: config.returningMinAvgSec ?? 60,
+        returningExcludeBots: true,
+        maxCapacity: latestState.sourceMeta.maxListeners || config.maxListenersCapacity || 500,
+      },
+      listeners: listenersWithAliases,
+      ipAliases,
+      botActivity,
+      breakdowns: {
+        countries: breakdownsLive.countries,
+        cities: breakdownsLive.cities,
+        players: breakdownsLive.players,
+        categories: breakdownsLive.categories,
+        platforms: breakdownsLive.platforms,
+        durationBuckets: breakdownsLive.durationBuckets,
+      },
+      breakdownsByPeriod,
+      detractorSongs: breakdowns24h.detractorSongs || getDetractorSongs(1440, modeForHistory, true, 10),
+      detractorSummary: breakdowns24h.detractorSummary || getDetractorSummary(1440, modeForHistory, true),
+      timeOfDay,
+      topReturningListeners,
+      history,
+      trackChanges,
+      recentEvents: stats24h.recentEvents,
+    });
   } catch (err) {
     console.error('Error in /api/dashboard handler:', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -588,21 +622,19 @@ app.get('/api/dashboard', async (req, res) => {
 // API: Detractor Songs (Tune-Outs & Drop-offs)
 app.get('/api/detractor-songs', (req, res) => {
   const rangeMinutes = req.query.rangeMinutes !== undefined ? parseInt(req.query.rangeMinutes, 10) : 1440;
-  const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '10', 10)));
   const mode = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
-  const songs = getDetractorSongs(rangeMinutes, mode, excludeBots, limit);
-  const summary = getDetractorSummary(rangeMinutes, mode, excludeBots);
-  res.json({ ok: true, rangeMinutes, excludeBots, songs, summary });
+  const songs = getDetractorSongs(rangeMinutes, mode, true, limit);
+  const summary = getDetractorSummary(rangeMinutes, mode, true);
+  res.json({ ok: true, rangeMinutes, excludeBots: true, songs, summary });
 });
 
 // API: Time-of-Day Audience Profile & Day-of-Week Breakdown
 app.get('/api/time-of-day', (req, res) => {
-  const excludeBots = req.query.excludeBots === '1' || req.query.excludeBots === 'true';
   const day = req.query.day || 'all';
   const mode = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
-  const profile = getTimeOfDayProfile(mode, excludeBots, day);
-  res.json({ ok: true, excludeBots, activeDay: day, profile });
+  const profile = getTimeOfDayProfile(mode, true, day);
+  res.json({ ok: true, excludeBots: true, activeDay: day, profile });
 });
 
 // API: Force immediate poll

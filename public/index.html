@@ -105,12 +105,6 @@
           <span class="status-dot"></span>
           <span id="connectionStatusText">Probing Icecast...</span>
         </div>
-
-        <label class="topbar-check-label" id="excludeBotsWrap" title="Exclude flagged bots and stream rippers from telemetry statistics and graphs">
-          <input type="checkbox" id="excludeBotsCheckbox" />
-          <span class="topbar-check-indicator"></span>
-          <span class="topbar-check-text">Exclude Bots</span>
-        </label>
       </div>
 
       <div class="topbar-scope-cluster">
@@ -267,6 +261,12 @@
             <input type="checkbox" id="dedupeListenersCheckbox" checked />
             <span class="topbar-check-indicator"></span>
             <span class="topbar-check-text">Deduplicate (Device / Agent)</span>
+          </label>
+
+          <label class="topbar-check-label" id="excludeBotsWrap" title="Hide flagged bots and stream rippers from this active connected clients table">
+            <input type="checkbox" id="excludeBotsCheckbox" />
+            <span class="topbar-check-indicator"></span>
+            <span class="topbar-check-text">Exclude Bots</span>
           </label>
 
           <button id="exportCsvBtn" class="btn" title="Export active listener table to CSV">Export CSV</button>
@@ -546,6 +546,42 @@
         <div class="panel-body">
           <div id="platformsDistList" class="dist-list"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- Dedicated Bot, Scraper & Probe Activity Card -->
+    <section class="panel" id="botsPanel" aria-label="Detected bots and stream rippers panel">
+      <div class="panel-header">
+        <div class="panel-title-group">
+          <h2>
+            <span>🤖 Detected Bots, Scrapers &amp; Monitoring Probes</span>
+            <span id="botActiveBadge" class="time-bound-badge live">0 Active Live</span>
+            <span id="bot24hBadge" class="mount-tag">0 tracked IPs (24h)</span>
+          </h2>
+          <div class="panel-subtitle">
+            Automated crawlers, audio stream rippers, and network health monitors isolated from listener analytics
+          </div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="clients-table" id="botsTable">
+          <thead>
+            <tr>
+              <th>Bot / Scanner IP</th>
+              <th>Location &amp; ISP</th>
+              <th>Detected Agent / Player</th>
+              <th>Category / Reason</th>
+              <th>Status / Sessions</th>
+              <th>Last Seen</th>
+              <th>Admin Action</th>
+            </tr>
+          </thead>
+          <tbody id="botsTableBody">
+            <tr>
+              <td colspan="7" class="empty-state">No bot or scraper activity recorded in the past 24 hours.</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
