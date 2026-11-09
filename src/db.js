@@ -1047,6 +1047,26 @@ function getDetractorSongs(rangeMinutes = 1440, sourceMode = null, excludeBots =
         AND LOWER(user_agent) NOT LIKE '%crawler%'
         AND LOWER(user_agent) NOT LIKE '%spider%'
         AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        AND LOWER(user_agent) NOT LIKE '%uptime%'
+        AND LOWER(user_agent) NOT LIKE '%robot%'
+        AND LOWER(user_agent) NOT LIKE '%pingdom%'
+        AND LOWER(user_agent) NOT LIKE '%statuscake%'
+        AND LOWER(user_agent) NOT LIKE '%zabbix%'
+        AND LOWER(user_agent) NOT LIKE '%prometheus%'
+        AND LOWER(user_agent) NOT LIKE '%nagios%'
+        AND LOWER(user_agent) NOT LIKE '%probe%'
+        AND LOWER(user_agent) NOT LIKE '%monitor%'
+        AND LOWER(user_agent) NOT LIKE '%radio-browser%'
+        AND LOWER(user_agent) NOT LIKE '%streamcheck%'
+        AND LOWER(user_agent) NOT LIKE '%curl%'
+        AND LOWER(user_agent) NOT LIKE '%python%'
+        AND LOWER(user_agent) NOT LIKE '%go-http%'
+        AND LOWER(user_agent) NOT LIKE '%okhttp%'
+        AND LOWER(user_agent) NOT LIKE '%aiohttp%'
+        AND LOWER(user_agent) NOT LIKE '%node-fetch%'
+        AND LOWER(user_agent) NOT LIKE '%axios%'
+        -- Exclude instantaneous network pings and micro-probes (< 15 seconds)
+        AND duration_seconds >= 15
         -- Station admin ("Me") IPs are ALWAYS excluded
         AND ip NOT IN (
           SELECT ip FROM ip_aliases
@@ -1142,6 +1162,26 @@ function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots
         AND LOWER(user_agent) NOT LIKE '%crawler%'
         AND LOWER(user_agent) NOT LIKE '%spider%'
         AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        AND LOWER(user_agent) NOT LIKE '%uptime%'
+        AND LOWER(user_agent) NOT LIKE '%robot%'
+        AND LOWER(user_agent) NOT LIKE '%pingdom%'
+        AND LOWER(user_agent) NOT LIKE '%statuscake%'
+        AND LOWER(user_agent) NOT LIKE '%zabbix%'
+        AND LOWER(user_agent) NOT LIKE '%prometheus%'
+        AND LOWER(user_agent) NOT LIKE '%nagios%'
+        AND LOWER(user_agent) NOT LIKE '%probe%'
+        AND LOWER(user_agent) NOT LIKE '%monitor%'
+        AND LOWER(user_agent) NOT LIKE '%radio-browser%'
+        AND LOWER(user_agent) NOT LIKE '%streamcheck%'
+        AND LOWER(user_agent) NOT LIKE '%curl%'
+        AND LOWER(user_agent) NOT LIKE '%python%'
+        AND LOWER(user_agent) NOT LIKE '%go-http%'
+        AND LOWER(user_agent) NOT LIKE '%okhttp%'
+        AND LOWER(user_agent) NOT LIKE '%aiohttp%'
+        AND LOWER(user_agent) NOT LIKE '%node-fetch%'
+        AND LOWER(user_agent) NOT LIKE '%axios%'
+        -- Exclude instantaneous network pings and micro-probes (< 15 seconds)
+        AND duration_seconds >= 15
         -- Station admin ("Me") IPs are ALWAYS excluded
         AND ip NOT IN (
           SELECT ip FROM ip_aliases
