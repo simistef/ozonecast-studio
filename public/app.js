@@ -9,10 +9,15 @@
   let rightMidTabMode = 'retention'; // 'retention' | 'events'
   let breakdownScopeMode = localStorage.getItem('ozonecast_breakdown_scope') || 'live'; // 'live' | '24h' | '7d' | 'all'
   let timeOfDayDayMode = localStorage.getItem('ozonecast_time_of_day_day') || 'all'; // 'all' | 'weekdays' | 'weekend' | 'mon' | 'tue' | ...
+  let detractorScopeMode = localStorage.getItem('ozonecast_detractor_scope') || 'past_24h';
   let tableSearchQuery = '';
   let tableCategoryFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
   let tableSortAsc = false;
+  let currentHistoryData = [];
+  let currentTrackChanges = [];
+  let historyHoverIdx = null;
+  let showTracksSetting = localStorage.getItem('ozonecast_show_tracks') !== '0'; // default true
   // Bot category groups collapsed by default; expanded groups tracked in localStorage
   let expandedBotCategories = new Set(JSON.parse(localStorage.getItem('ozonecast_expanded_bots') || '[]'));
   let themeMode = localStorage.getItem('ozonecast_theme_mode') || 'auto'; // 'auto' | 'light' | 'dark'
@@ -767,8 +772,6 @@
   }
 
   // Render Detractor Songs (Tune-Outs & Drop-Off Analytics)
-  let detractorScopeMode = localStorage.getItem('ozonecast_detractor_scope') || 'past_24h';
-
   function renderDetractorSongs(songsData, summaryData) {
     const listEl = document.getElementById('detractorSongsList');
     const kpiEl = document.getElementById('detractorKpiStrip');
@@ -1080,11 +1083,6 @@
         .join('');
     }
   }
-
-  let currentHistoryData = [];
-  let currentTrackChanges = [];
-  let historyHoverIdx = null;
-  let showTracksSetting = localStorage.getItem('ozonecast_show_tracks') !== '0'; // default true
 
   function getDynamicYScale(rawMax) {
     if (rawMax <= 1) return { maxVal: 2, steps: 2 };
