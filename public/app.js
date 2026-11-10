@@ -10,6 +10,7 @@
   let breakdownScopeMode = localStorage.getItem('ozonecast_breakdown_scope') || 'live'; // 'live' | '24h' | '7d' | 'all'
   let timeOfDayDayMode = localStorage.getItem('ozonecast_time_of_day_day') || 'all'; // 'all' | 'weekdays' | 'weekend' | 'mon' | 'tue' | ...
   let detractorScopeMode = localStorage.getItem('ozonecast_detractor_scope') || 'past_24h';
+  let returningSortMode = localStorage.getItem('ozonecast_returning_sort') || 'total_time'; // 'total_time' | 'sessions'
   let tableSearchQuery = '';
   let tableCategoryFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
@@ -161,7 +162,7 @@
 
   async function fetchDashboard() {
     try {
-      const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}`);
+      const res = await fetch(`/api/dashboard?rangeMinutes=${selectedRangeMinutes}&returningSortBy=${encodeURIComponent(returningSortMode)}`);
       if (!res.ok) {
         console.warn(`Dashboard telemetry HTTP ${res.status}`);
         return;
@@ -718,6 +719,13 @@
     if (tag && kpis) {
       tag.textContent = `${kpis.returningListenerCount ?? (topList || []).length} Repeat IPs`;
     }
+
+    const sortSelect = document.getElementById('returningSortByQuickSelect');
+    if (sortSelect) {
+      const activeSort = kpis?.returningSortBy || returningSortMode || 'total_time';
+      sortSelect.value = activeSort;
+    }
+
     if (!container) return;
 
     const items = (topList || []).slice(0, 5);
@@ -2722,6 +2730,20 @@
       await fetchDashboard();
     });
 
+    // Returning Listeners Sort By quick selector
+    document.getElementById('returningSortByQuickSelect')?.addEventListener('change', async e => {
+      const val = e.target.value === 'sessions' ? 'sessions' : 'total_time';
+      returningSortMode = val;
+      localStorage.setItem('ozonecast_returning_sort', val);
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returningSortBy: val }),
+      });
+      showToast(`Top Returning ranked by: ${val === 'sessions' ? 'Session Reconnects' : 'Total Listening Time'}`);
+      await fetchDashboard();
+    });
+
     // Returning Listeners Min Avg Duration quick selector
     document.getElementById('returningMinAvgQuickSelect')?.addEventListener('change', async e => {
       const minSec = Math.max(0, parseInt(e.target.value, 10) || 0);
@@ -2854,6 +2876,9 @@
         document.getElementById('cfgMaxCapacity').value = data.config.maxListenersCapacity || 500;
         document.getElementById('cfgReturningMinAvgSec').value =
           Number.isFinite(Number(data.config.returningMinAvgSec)) ? Number(data.config.returningMinAvgSec) : 60;
+        if (document.getElementById('cfgReturningSortBy')) {
+          document.getElementById('cfgReturningSortBy').value = data.config.returningSortBy || 'total_time';
+        }
         document.getElementById('cfgReturningExcludeBots').checked = data.config.returningExcludeBots !== false;
         document.getElementById('cfgRequireDashboardAuth').checked = data.config.requireDashboardAuth !== false;
         document.getElementById('cfgIgnoreTls').checked = data.config.ignoreTlsErrors !== false;
@@ -2910,6 +2935,7 @@
         sourceMode: document.getElementById('cfgSourceMode').value,
         maxListenersCapacity: parseInt(document.getElementById('cfgMaxCapacity').value, 10) || 500,
         returningMinAvgSec: Number.isFinite(minAvgRaw) ? Math.max(0, minAvgRaw) : 60,
+        returningSortBy: document.getElementById('cfgReturningSortBy')?.value || 'total_time',
         returningExcludeBots: document.getElementById('cfgReturningExcludeBots').checked,
         requireDashboardAuth: document.getElementById('cfgRequireDashboardAuth').checked,
         ignoreTlsErrors: document.getElementById('cfgIgnoreTls').checked,

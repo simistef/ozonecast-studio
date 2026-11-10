@@ -509,7 +509,8 @@ app.get('/api/dashboard', async (req, res) => {
     const history = getHistoricalSeries(rangeMinutes, modeForHistory, true);
     const trackChanges = getHistoricalTrackChanges(rangeMinutes, modeForHistory);
     const timeOfDay = getTimeOfDayProfile(modeForHistory, true);
-    const topReturningListeners = getTopReturningListeners(5, modeForHistory);
+    const returningSortBy = req.query.returningSortBy || config.returningSortBy || 'total_time';
+    const topReturningListeners = getTopReturningListeners(5, modeForHistory, returningSortBy);
     const stats24h = getAggregatedStats(modeForHistory, true);
 
     // Collect bot activity for dedicated bottom bot card
@@ -615,6 +616,7 @@ app.get('/api/dashboard', async (req, res) => {
         totalListeningHours24h: Math.max(stats24h.totalListeningHours24h, breakdownsLive.totalActiveListeningHours),
         returningListenerCount: stats24h.returningListenerCount,
         returningMinAvgSec: config.returningMinAvgSec ?? 60,
+        returningSortBy: config.returningSortBy || returningSortBy || 'total_time',
         returningExcludeBots: true,
         maxCapacity: latestState.sourceMeta.maxListeners || config.maxListenersCapacity || 500,
       },
@@ -884,6 +886,9 @@ app.post('/api/config', async (req, res) => {
   }
   if (body.returningMinAvgSec !== undefined) {
     allowed.returningMinAvgSec = Math.max(0, parseInt(body.returningMinAvgSec, 10) || 0);
+  }
+  if (body.returningSortBy !== undefined) {
+    allowed.returningSortBy = body.returningSortBy === 'sessions' ? 'sessions' : 'total_time';
   }
   if (typeof body.returningExcludeBots === 'boolean') {
     allowed.returningExcludeBots = body.returningExcludeBots;

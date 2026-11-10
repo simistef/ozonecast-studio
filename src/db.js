@@ -135,6 +135,7 @@ const DEFAULT_CONFIG = {
     ? parseInt(process.env.RETURNING_MIN_AVG_SEC || '60', 10)
     : 60,
   returningExcludeBots: process.env.RETURNING_EXCLUDE_BOTS !== 'false',
+  returningSortBy: process.env.RETURNING_SORT_BY || 'total_time',
   requireDashboardAuth: process.env.REQUIRE_DASHBOARD_AUTH !== 'false',
 };
 
@@ -231,6 +232,57 @@ try {
   `);
 } catch (_) {}
 
+/**
+ * Consolidates fragmented historical sessions for the same IP + player/device
+ * where a reconnection occurred within graceWindowMs (default 180s = 3 minutes).
+ * This eliminates artificial session inflation from network hiccups and browser tab renegotiations.
+ */
+function consolidateHistoricalSessions(graceWindowMs = 180000) {
+  try {
+    const groups = db.prepare('SELECT DISTINCT source_mode, ip, player FROM listener_sessions').all();
+    const updateStmt = db.prepare(`
+      UPDATE listener_sessions 
+      SET first_seen = ?, last_seen = ?, duration_seconds = ?, is_active = ?, last_track = ?
+      WHERE session_key = ?
+    `);
+    const deleteStmt = db.prepare('DELETE FROM listener_sessions WHERE session_key = ?');
+
+    let mergedCount = 0;
+    for (const g of groups) {
+      const list = db.prepare('SELECT * FROM listener_sessions WHERE source_mode = ? AND ip = ? AND player = ? ORDER BY first_seen ASC').all(g.source_mode, g.ip, g.player);
+      if (list.length <= 1) continue;
+
+      let target = list[0];
+      for (let i = 1; i < list.length; i++) {
+        const curr = list[i];
+        if (curr.first_seen <= target.last_seen + graceWindowMs) {
+          target.last_seen = Math.max(target.last_seen, curr.last_seen);
+          target.duration_seconds = Math.max(
+            target.duration_seconds + curr.duration_seconds,
+            Math.round((target.last_seen - target.first_seen) / 1000)
+          );
+          target.is_active = Math.max(target.is_active || 0, curr.is_active || 0);
+          if (curr.last_track) target.last_track = curr.last_track;
+          deleteStmt.run(curr.session_key);
+          mergedCount++;
+        } else {
+          updateStmt.run(target.first_seen, target.last_seen, target.duration_seconds, target.is_active, target.last_track || '', target.session_key);
+          target = curr;
+        }
+      }
+      updateStmt.run(target.first_seen, target.last_seen, target.duration_seconds, target.is_active, target.last_track || '', target.session_key);
+    }
+    if (mergedCount > 0) {
+      console.log(`[Sessions] Consolidated ${mergedCount} fragmented historical listener sessions (3-min grace window).`);
+    }
+  } catch (err) {
+    console.warn(`[Sessions] Historical session consolidation skipped: ${err.message}`);
+  }
+}
+
+// Automatically consolidate on startup
+consolidateHistoricalSessions();
+
 
 const upsertSessionStmt = db.prepare(`
   INSERT INTO listener_sessions (
@@ -303,17 +355,69 @@ function recordPollResult({
   }
 
   const prevActiveRows = db
-    .prepare('SELECT session_key, ip, country_code, city, player, duration_seconds FROM listener_sessions WHERE is_active = 1 AND source_mode = ?')
+    .prepare('SELECT session_key, client_id, ip, country_code, city, player, first_seen, last_seen, duration_seconds FROM listener_sessions WHERE is_active = 1 AND source_mode = ?')
     .all(sourceMode);
   const prevMap = new Map(prevActiveRows.map(r => [r.session_key, r]));
   const currentKeys = new Set();
 
-  for (const client of enrichedListeners) {
-    const approxStartSec = Math.floor((now / 1000 - client.connectedSeconds) / 60);
-    const sessionKey = `${sourceMode}:${client.ip}:${client.clientId || approxStartSec}`;
+  const RECONNECT_GRACE_MS = 180 * 1000; // 3-minute grace window for seamless session stitching
+  const activeDeviceMap = new Map();
+  for (const prev of prevActiveRows) {
+    const devKey = `${prev.ip}|${prev.player}`;
+    if (!activeDeviceMap.has(devKey)) {
+      activeDeviceMap.set(devKey, prev);
+    }
+  }
+
+  const findRecentEndedStmt = db.prepare(`
+    SELECT session_key, client_id, ip, country_code, city, player, first_seen, last_seen, duration_seconds
+    FROM listener_sessions
+    WHERE source_mode = ? AND ip = ? AND player = ? AND is_active = 0 AND last_seen >= ?
+    ORDER BY last_seen DESC
+    LIMIT 1
+  `);
+
+  for (const client of deduplicatedListeners) {
+    const devKey = `${client.ip}|${client.ua.player}`;
+    let sessionKey = null;
+    let firstSeen = null;
+    let accumulatedDuration = client.connectedSeconds;
+
+    // 1. Direct match with active session from previous poll
+    const directKey = `${sourceMode}:${client.ip}:${client.clientId}`;
+    if (prevMap.has(directKey)) {
+      sessionKey = directKey;
+      const prev = prevMap.get(directKey);
+      firstSeen = prev.first_seen;
+      accumulatedDuration = Math.max(prev.duration_seconds, client.connectedSeconds, Math.round((now - prev.first_seen) / 1000));
+    }
+    // 2. Active session on the same device (IP + player), e.g. recycled connection ID
+    else if (activeDeviceMap.has(devKey)) {
+      const prev = activeDeviceMap.get(devKey);
+      sessionKey = prev.session_key;
+      firstSeen = prev.first_seen;
+      accumulatedDuration = Math.max(prev.duration_seconds, client.connectedSeconds, Math.round((now - prev.first_seen) / 1000));
+      activeDeviceMap.delete(devKey);
+    }
+    // 3. Stitched reconnection: recently ended session within the 3-minute grace window
+    else {
+      const recent = findRecentEndedStmt.get(sourceMode, client.ip, client.ua.player, now - RECONNECT_GRACE_MS);
+      if (recent) {
+        sessionKey = recent.session_key;
+        firstSeen = recent.first_seen;
+        accumulatedDuration = Math.max(recent.duration_seconds + client.connectedSeconds, Math.round((now - recent.first_seen) / 1000));
+      }
+    }
+
+    const isNewSession = !sessionKey;
+    if (isNewSession) {
+      sessionKey = `${sourceMode}:${client.ip}:${client.clientId || Math.floor(now / 1000)}`;
+      firstSeen = now - client.connectedSeconds * 1000;
+      accumulatedDuration = client.connectedSeconds;
+    }
+
     currentKeys.add(sessionKey);
 
-    const firstSeen = now - client.connectedSeconds * 1000;
     upsertSessionStmt.run(
       sessionKey,
       String(client.clientId),
@@ -330,7 +434,7 @@ function recordPollResult({
       client.geo.lon,
       firstSeen,
       now,
-      client.connectedSeconds,
+      accumulatedDuration,
       sourceMode,
       currentTrack || '',
       trackProgressSec || 0
@@ -346,7 +450,7 @@ function recordPollResult({
       } catch (_) {}
     }
 
-    if (!prevMap.has(sessionKey) && prevActiveRows.length > 0) {
+    if (isNewSession && prevActiveRows.length > 0) {
       insertEventStmt.run(
         now,
         'join',
@@ -1279,15 +1383,16 @@ function setIpAlias(ip, friendlyName, notes = '') {
 }
 
 /**
- * Returns the Top N Returning Listeners ranked by distinct session visits & cumulative connected time.
+ * Returns the Top N Returning Listeners ranked by cumulative connected time (or session count).
  * Excludes bots/crawlers (when returningExcludeBots is true) and listeners with average connection
  * time below returningMinAvgSec (default 60s = 1 minute).
  */
-function getTopReturningListeners(limit = 5, sourceMode = 'live') {
+function getTopReturningListeners(limit = 5, sourceMode = 'live', sortBy = 'total_time') {
   const cfg = getConfig();
   const minAvgSec = Math.max(0, Number(cfg.returningMinAvgSec ?? 60));
   const excludeBots = cfg.returningExcludeBots !== false ? 1 : 0;
   const aliases = getIpAliasesMap();
+  const sortMode = sortBy === 'sessions' ? 'sessions' : (cfg.returningSortBy === 'sessions' ? 'sessions' : 'total_time');
 
   const rows = db
     .prepare(`
@@ -1319,10 +1424,12 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live') {
         ))
       GROUP BY ip
       HAVING AVG(duration_seconds) >= ?
-      ORDER BY session_count DESC, total_duration_seconds DESC
+      ORDER BY 
+        CASE WHEN ? = 'sessions' THEN session_count ELSE total_duration_seconds END DESC,
+        CASE WHEN ? = 'sessions' THEN total_duration_seconds ELSE session_count END DESC
       LIMIT ?
     `)
-    .all(sourceMode, excludeBots, minAvgSec, limit);
+    .all(sourceMode, excludeBots, minAvgSec, sortMode, sortMode, limit);
 
   return rows.map((r, idx) => ({
     rank: idx + 1,
@@ -1421,6 +1528,7 @@ function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
     returningListenerCount: returningCountRow?.returning_ips || 0,
     returningMinAvgSec: minAvgSec,
     returningExcludeBots: Boolean(excludeBots),
+    returningSortBy: cfg.returningSortBy || 'total_time',
     recentEvents,
   };
 }

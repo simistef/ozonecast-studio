@@ -471,6 +471,10 @@
             <div class="panel-subtitle">Most loyal repeat listeners across all recorded station history (bots excluded • filtered by min. avg connected time)</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="returningSortByQuickSelect" class="select-control" title="Rank returning listeners by total listening time or session count" aria-label="Rank returning listeners">
+              <option value="total_time" selected>Sort: Total Time</option>
+              <option value="sessions">Sort: Sessions</option>
+            </select>
             <select id="returningMinAvgQuickSelect" class="select-control" title="Minimum average session duration to qualify for Top 5 Returning Listeners" aria-label="Minimum average session duration">
               <option value="0">Min Avg: Any (0s)</option>
               <option value="30">Min Avg: 30 sec</option>
@@ -648,6 +652,13 @@
             <div class="form-row">
               <label for="cfgReturningMinAvgSec">Returning Listeners Min. Avg Time (seconds)</label>
               <input type="number" id="cfgReturningMinAvgSec" class="form-input mono" min="0" max="86400" value="60" title="Exclude listeners from Top 5 Returning Listeners whose average connection time is below this threshold (60s = 1 minute)" />
+            </div>
+            <div class="form-row">
+              <label for="cfgReturningSortBy">Returning Listeners Ranking Priority</label>
+              <select id="cfgReturningSortBy" class="form-input">
+                <option value="total_time" selected>Total Listening Time (Cumulative Loyalty)</option>
+                <option value="sessions">Session Reconnect Count</option>
+              </select>
             </div>
           </div>
 
