@@ -465,10 +465,20 @@ app.get('/api/dashboard', async (req, res) => {
     const breakdowns24h = getHistoricalBreakdowns(1440, modeForHistory, true);
     const breakdowns7d = getHistoricalBreakdowns(10080, modeForHistory, true);
     const breakdownsAll = getHistoricalBreakdowns(0, modeForHistory, true);
+    const stats24h = getAggregatedStats(modeForHistory, true);
+
+    breakdowns24h.peak = stats24h.peak24h;
+    breakdowns24h.peakTs = stats24h.peak24hTs;
+    breakdowns7d.peak = stats24h.peak7d;
+    breakdowns7d.peakTs = stats24h.peak7dTs;
+    breakdownsAll.peak = stats24h.allTimePeak;
+    breakdownsAll.peakTs = stats24h.allTimePeakTs;
 
     const breakdownsByPeriod = {
       live: {
         ...breakdownsLive,
+        peak: stats24h.peak24h,
+        peakTs: stats24h.peak24hTs,
         mapLocations: deduplicatedHuman.map(l => ({
           ip: l.ip,
           lat: l.geo?.lat ?? l.lat,
@@ -511,7 +521,6 @@ app.get('/api/dashboard', async (req, res) => {
     const timeOfDay = getTimeOfDayProfile(modeForHistory, true);
     const returningSortBy = req.query.returningSortBy || config.returningSortBy || 'total_time';
     const topReturningListeners = getTopReturningListeners(5, modeForHistory, returningSortBy);
-    const stats24h = getAggregatedStats(modeForHistory, true);
 
     // Collect bot activity for dedicated bottom bot card
     const botActivity = getBotActivity(1440, modeForHistory);
@@ -609,7 +618,10 @@ app.get('/api/dashboard', async (req, res) => {
         totalActiveListeningHours: breakdownsLive.totalActiveListeningHours,
         peak24h: Math.max(stats24h.peak24h, deduplicatedHuman.length),
         peak24hTs: stats24h.peak24hTs,
+        peak7d: Math.max(stats24h.peak7d || stats24h.peak24h, deduplicatedHuman.length),
+        peak7dTs: stats24h.peak7dTs || stats24h.peak24hTs,
         allTimePeak: Math.max(stats24h.allTimePeak, deduplicatedHuman.length),
+        allTimePeakTs: stats24h.allTimePeakTs || stats24h.peak24hTs,
         totalSessions24h: stats24h.totalSessions24h,
         uniqueIps24h: Math.max(stats24h.uniqueIps24h, breakdownsLive.uniqueIps),
         uniqueCountries24h: Math.max(stats24h.uniqueCountries24h, breakdownsLive.countries.length),

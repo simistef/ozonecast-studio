@@ -163,8 +163,8 @@
       <article class="kpi-card">
         <div class="kpi-header">
           <div style="display:flex;align-items:center;gap:6px">
-            <span>CONCURRENT LISTENERS</span>
-            <span class="time-bound-badge live" title="Real-time live connections currently streaming">Live Now</span>
+            <span id="kpiCard1Title">CONCURRENT LISTENERS</span>
+            <span id="kpiCard1ScopeBadge" class="time-bound-badge live" title="Real-time live connections currently streaming">Live Now</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px">
             <span id="kpiBotsFilterBadge" class="kpi-subtag warning hidden" title="Flagged bots and stream rippers excluded from statistics">🤖 Filtered</span>
@@ -180,8 +180,8 @@
             <div id="capacityMeterFill" class="capacity-fill" style="width: 0%"></div>
           </div>
           <div class="kpi-footer" style="margin-top:6px">
-            <span>Mount: <strong id="kpiMountName" class="mono">/listen</strong></span>
-            <span>Max: <strong id="kpiMaxCapacity" class="mono">500</strong></span>
+            <span id="kpiCard1FooterLeft">Mount: <strong id="kpiMountName" class="mono">/listen</strong></span>
+            <span id="kpiCard1FooterRight">Max: <strong id="kpiMaxCapacity" class="mono">500</strong></span>
           </div>
         </div>
       </article>
@@ -190,7 +190,7 @@
         <div class="kpi-header">
           <div style="display:flex;align-items:center;gap:6px">
             <span>PEAK LISTENERS</span>
-            <span class="time-bound-badge time-24h" title="Rolling peak concurrency over the last 24 hours">24h Peak</span>
+            <span id="kpiPeakScopeBadge" class="time-bound-badge time-24h" title="Peak listener concurrency">24h Peak</span>
           </div>
           <span id="kpiAllTimePeakBadge" class="time-bound-badge alltime" title="Highest listener concurrency ever recorded in SQLite history">All-Time: 0</span>
         </div>
@@ -200,7 +200,7 @@
         </div>
         <div class="kpi-footer">
           <span>Recorded at <strong id="kpiPeakTime" class="mono">--:--</strong></span>
-          <span>SQLite Tracked</span>
+          <span id="kpiPeakFooterRight">SQLite Tracked</span>
         </div>
       </article>
 
@@ -208,7 +208,7 @@
         <div class="kpi-header">
           <div style="display:flex;align-items:center;gap:6px">
             <span>AVG TUNE-IN DURATION</span>
-            <span class="time-bound-badge live" id="kpiAvgDurationScopeBadge" title="Average duration of currently active live listeners">Live Active</span>
+            <span class="time-bound-badge live" id="kpiAvgDurationScopeBadge" title="Average duration of listeners in current period scope">Live Active</span>
           </div>
           <span id="kpiLongestTag" class="kpi-subtag cyan">Max: 0m</span>
         </div>
@@ -217,8 +217,8 @@
           <div id="kpiTlhBadge" class="kpi-subtag emerald">0.0 TLH</div>
         </div>
         <div class="kpi-footer">
-          <span>Active TLH (Live): <strong id="kpiActiveTlh" class="mono">0.00 hrs</strong></span>
-          <span>24h Total TLH: <strong id="kpi24hTlh" class="mono">0.00 hrs</strong></span>
+          <span id="kpiCard3FooterLeft">Active TLH (Live): <strong id="kpiActiveTlh" class="mono">0.00 hrs</strong></span>
+          <span id="kpiCard3FooterRight">24h Total TLH: <strong id="kpi24hTlh" class="mono">0.00 hrs</strong></span>
         </div>
       </article>
 
@@ -226,7 +226,7 @@
         <div class="kpi-header">
           <div style="display:flex;align-items:center;gap:6px">
             <span>GEOGRAPHIC REACH &amp; SESSIONS</span>
-            <span class="time-bound-badge live" id="kpiGeoScopeBadge" title="Unique countries currently tuned in live">Live Now</span>
+            <span class="time-bound-badge live" id="kpiGeoScopeBadge" title="Unique countries in current period scope">Live Now</span>
           </div>
           <span id="kpiDupConnectionsTag" class="kpi-subtag">0 multi-stream IPs</span>
         </div>
@@ -235,8 +235,8 @@
           <div id="kpiTopCountryBadge" class="kpi-subtag amber">Top: --</div>
         </div>
         <div class="kpi-footer">
-          <span>24h Unique IPs: <strong id="kpi24hUniqueIps" class="mono">0</strong></span>
-          <span>24h Sessions: <strong id="kpi24hSessions" class="mono">0</strong></span>
+          <span id="kpiCard4FooterLeft">24h Unique IPs: <strong id="kpi24hUniqueIps" class="mono">0</strong></span>
+          <span id="kpiCard4FooterRight">24h Sessions: <strong id="kpi24hSessions" class="mono">0</strong></span>
         </div>
       </article>
     </section>

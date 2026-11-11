@@ -1461,11 +1461,16 @@ function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
   const countCol = excludeBots ? 'COALESCE(human_count, listener_count)' : 'listener_count';
 
   const peak24hRow = db
-    .prepare(`SELECT ${countCol} as listener_count, ts, peak_reported FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY ${countCol} DESC LIMIT 1`)
+    .prepare(`SELECT ${countCol} as listener_count, ts, peak_reported FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY ${countCol} DESC, ts DESC LIMIT 1`)
     .get(dayAgo, sourceMode);
 
+  const weekAgo = now - 7 * 24 * 3600 * 1000;
+  const peak7dRow = db
+    .prepare(`SELECT ${countCol} as listener_count, ts, peak_reported FROM snapshots WHERE ts >= ? AND source_mode = ? ORDER BY ${countCol} DESC, ts DESC LIMIT 1`)
+    .get(weekAgo, sourceMode);
+
   const allTimePeakRow = db
-    .prepare(`SELECT MAX( MAX(${countCol}), MAX(peak_reported) ) as peak, ts FROM snapshots WHERE source_mode = ?`)
+    .prepare(`SELECT ${countCol} as listener_count, ts, peak_reported FROM snapshots WHERE source_mode = ? ORDER BY ${countCol} DESC, ts DESC LIMIT 1`)
     .get(sourceMode);
 
   const sessionStats24h = db
@@ -1519,7 +1524,10 @@ function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
   return {
     peak24h: peak24hRow ? Math.max(peak24hRow.listener_count, peak24hRow.peak_reported || 0) : 0,
     peak24hTs: peak24hRow ? peak24hRow.ts : now,
-    allTimePeak: allTimePeakRow?.peak || 0,
+    peak7d: peak7dRow ? Math.max(peak7dRow.listener_count, peak7dRow.peak_reported || 0) : 0,
+    peak7dTs: peak7dRow ? peak7dRow.ts : now,
+    allTimePeak: allTimePeakRow ? Math.max(allTimePeakRow.listener_count, allTimePeakRow.peak_reported || 0) : 0,
+    allTimePeakTs: allTimePeakRow ? allTimePeakRow.ts : now,
     totalSessions24h: sessionStats24h?.total_sessions || 0,
     uniqueIps24h: sessionStats24h?.unique_ips_24h || 0,
     uniqueCountries24h: sessionStats24h?.unique_countries_24h || 0,

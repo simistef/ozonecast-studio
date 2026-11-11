@@ -282,6 +282,236 @@
     });
   }
 
+  function renderKpiCards() {
+    if (!dashboardState) return;
+    const { connection, kpis, breakdowns } = dashboardState;
+    const activeBreakdowns = getActiveBreakdowns() || breakdowns || {};
+    const mode = breakdownScopeMode || 'live';
+
+    // 1. Listeners Card (Concurrent in live, Unique in historical)
+    const card1Title = document.getElementById('kpiCard1Title');
+    const card1Badge = document.getElementById('kpiCard1ScopeBadge');
+    const card1Number = document.getElementById('kpiCurrentListeners');
+    const card1Tag = document.getElementById('kpiUniqueIpsTag');
+    const botFilterBadge = document.getElementById('kpiBotsFilterBadge');
+    const capPctBadge = document.getElementById('capacityPctBadge');
+    const capMeterFill = document.getElementById('capacityMeterFill');
+    const card1FooterLeft = document.getElementById('kpiCard1FooterLeft');
+    const card1FooterRight = document.getElementById('kpiCard1FooterRight');
+
+    const capPct = Math.min(100, Math.round((kpis.currentListeners / (kpis.maxCapacity || 500)) * 100));
+
+    if (botFilterBadge) {
+      if (mode === 'live') {
+        const botCount = kpis.botListenersCount || 0;
+        botFilterBadge.textContent = botCount > 0 ? `🤖 ${botCount} Bot${botCount === 1 ? '' : 's'} Ignored` : '🤖 Bots Ignored';
+        botFilterBadge.title = `${botCount} flagged bot/crawler/probe connections isolated from listener analytics`;
+      } else {
+        botFilterBadge.textContent = '🤖 Bots Excluded';
+        botFilterBadge.title = 'Flagged bot and crawler connections excluded from historical metrics';
+      }
+      botFilterBadge.classList.remove('hidden');
+    }
+
+    if (mode === 'live') {
+      if (card1Title) card1Title.textContent = 'CONCURRENT LISTENERS';
+      if (card1Badge) {
+        card1Badge.className = 'time-bound-badge live';
+        card1Badge.textContent = 'Live Now';
+        card1Badge.title = 'Real-time live connections currently streaming';
+      }
+      if (card1Number) card1Number.textContent = kpis.currentListeners;
+      const totalStreams = kpis.totalStreams || kpis.totalListenersRaw || kpis.currentListeners;
+      const streamSuffix = (totalStreams && totalStreams > kpis.currentListeners)
+        ? ` (${totalStreams} streams)`
+        : '';
+      if (card1Tag) card1Tag.textContent = `${kpis.uniqueIps} unique IPs${streamSuffix}`;
+      if (capPctBadge) capPctBadge.textContent = `${capPct}% cap`;
+      if (capMeterFill) capMeterFill.style.width = `${Math.max(2, capPct)}%`;
+      if (card1FooterLeft) card1FooterLeft.innerHTML = `Mount: <strong id="kpiMountName" class="mono">${escapeHtml(connection.mount || '/listen')}</strong>`;
+      if (card1FooterRight) card1FooterRight.innerHTML = `Max: <strong id="kpiMaxCapacity" class="mono">${kpis.maxCapacity || 500}</strong>`;
+    } else {
+      const modeLabels = {
+        '24h': { title: '24H UNIQUE LISTENERS', badge: 'Past 24h', badgeClass: 'time-bound-badge time-24h', footer: '24h Sessions' },
+        '7d': { title: '7D UNIQUE LISTENERS', badge: 'Past 7d', badgeClass: 'time-bound-badge time-7d', footer: '7d Sessions' },
+        all: { title: 'ALL-TIME UNIQUE LISTENERS', badge: 'All-Time', badgeClass: 'time-bound-badge alltime', footer: 'All Sessions' },
+      };
+      const cfg = modeLabels[mode] || modeLabels['24h'];
+      if (card1Title) card1Title.textContent = cfg.title;
+      if (card1Badge) {
+        card1Badge.className = cfg.badgeClass;
+        card1Badge.textContent = cfg.badge;
+        card1Badge.title = `De-duplicated unique listener IPs over ${cfg.badge}`;
+      }
+      const uniqueCount = activeBreakdowns.uniqueIps ?? (mode === '24h' ? kpis.uniqueIps24h : 0);
+      if (card1Number) card1Number.textContent = uniqueCount;
+      const sessCount = activeBreakdowns.totalSessions ?? (mode === '24h' ? kpis.totalSessions24h : 0);
+      if (card1Tag) card1Tag.textContent = `${sessCount} total sessions`;
+      if (capPctBadge) capPctBadge.textContent = `${uniqueCount} unique`;
+      const histCap = Math.min(100, Math.round((uniqueCount / (kpis.maxCapacity || 500)) * 100));
+      if (capMeterFill) capMeterFill.style.width = `${Math.max(2, histCap)}%`;
+      if (card1FooterLeft) card1FooterLeft.innerHTML = `Active Live: <strong class="mono">${kpis.currentListeners}</strong>`;
+      if (card1FooterRight) card1FooterRight.innerHTML = `${cfg.footer}: <strong class="mono">${sessCount}</strong>`;
+    }
+
+    // 2. Peak Listeners Card
+    const peakScopeBadge = document.getElementById('kpiPeakScopeBadge');
+    const allTimeBadge = document.getElementById('kpiAllTimePeakBadge');
+    const peakNumber = document.getElementById('kpiPeak24h');
+    const peakDeltaTag = document.getElementById('kpiPeakDeltaTag');
+    const peakTimeEl = document.getElementById('kpiPeakTime');
+    const peakFooterRight = document.getElementById('kpiPeakFooterRight');
+
+    if (allTimeBadge) allTimeBadge.textContent = `All-Time: ${kpis.allTimePeak}`;
+
+    if (mode === 'live' || mode === '24h') {
+      if (peakScopeBadge) {
+        peakScopeBadge.className = 'time-bound-badge time-24h';
+        peakScopeBadge.textContent = '24h Peak';
+        peakScopeBadge.title = 'Rolling peak concurrency over the last 24 hours';
+      }
+      if (peakNumber) peakNumber.textContent = kpis.peak24h;
+      const diffFromPeak = kpis.peak24h - kpis.currentListeners;
+      if (peakDeltaTag) {
+        peakDeltaTag.textContent = diffFromPeak <= 0 ? 'At Peak Now!' : `-${diffFromPeak} from peak`;
+      }
+      if (peakTimeEl) {
+        peakTimeEl.textContent = new Date(kpis.peak24hTs).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      }
+      if (peakFooterRight) peakFooterRight.textContent = mode === 'live' ? 'SQLite Tracked' : '24h Concurrency';
+    } else if (mode === '7d') {
+      const peakVal = activeBreakdowns.peak ?? kpis.peak7d ?? kpis.peak24h;
+      const peakTs = activeBreakdowns.peakTs || kpis.peak7dTs || kpis.peak24hTs;
+      if (peakScopeBadge) {
+        peakScopeBadge.className = 'time-bound-badge time-7d';
+        peakScopeBadge.textContent = '7d Peak';
+        peakScopeBadge.title = 'Peak listener concurrency recorded over the last 7 days';
+      }
+      if (peakNumber) peakNumber.textContent = peakVal;
+      const diffFromPeak = peakVal - kpis.currentListeners;
+      if (peakDeltaTag) {
+        peakDeltaTag.textContent = diffFromPeak <= 0 ? 'At 7d Peak Now!' : `-${diffFromPeak} from 7d peak`;
+      }
+      if (peakTimeEl) {
+        peakTimeEl.textContent = `${new Date(peakTs).toLocaleDateString([], { month: 'short', day: 'numeric' })} ${new Date(peakTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      if (peakFooterRight) peakFooterRight.textContent = '7d Concurrency';
+    } else {
+      // 'all'
+      const peakVal = activeBreakdowns.peak ?? kpis.allTimePeak ?? kpis.peak24h;
+      const peakTs = activeBreakdowns.peakTs || kpis.allTimePeakTs || kpis.peak24hTs;
+      if (peakScopeBadge) {
+        peakScopeBadge.className = 'time-bound-badge alltime';
+        peakScopeBadge.textContent = 'Record Peak';
+        peakScopeBadge.title = 'Highest listener concurrency ever recorded in SQLite history';
+      }
+      if (peakNumber) peakNumber.textContent = peakVal;
+      const diffFromPeak = peakVal - kpis.currentListeners;
+      if (peakDeltaTag) {
+        peakDeltaTag.textContent = diffFromPeak <= 0 ? 'At Record Peak!' : `-${diffFromPeak} from record`;
+      }
+      if (peakTimeEl) {
+        peakTimeEl.textContent = `${new Date(peakTs).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      }
+      if (peakFooterRight) peakFooterRight.textContent = 'All-Time Record';
+    }
+
+    // 3. Avg Tune-In Duration Card
+    const avgDurationBadge = document.getElementById('kpiAvgDurationScopeBadge');
+    const longestTag = document.getElementById('kpiLongestTag');
+    const avgDurationEl = document.getElementById('kpiAvgDuration');
+    const tlhBadge = document.getElementById('kpiTlhBadge');
+    const card3FooterLeft = document.getElementById('kpiCard3FooterLeft');
+    const card3FooterRight = document.getElementById('kpiCard3FooterRight');
+
+    const durationScopeConfig = {
+      live: { badge: 'Live Active', badgeClass: 'time-bound-badge live' },
+      '24h': { badge: 'Past 24h', badgeClass: 'time-bound-badge time-24h' },
+      '7d': { badge: 'Past 7d', badgeClass: 'time-bound-badge time-7d' },
+      all: { badge: 'All-Time', badgeClass: 'time-bound-badge alltime' },
+    };
+    const durCfg = durationScopeConfig[mode] || durationScopeConfig.live;
+    if (avgDurationBadge) {
+      avgDurationBadge.className = durCfg.badgeClass;
+      avgDurationBadge.textContent = durCfg.badge;
+      avgDurationBadge.title = `Average duration of listeners in ${durCfg.badge}`;
+    }
+
+    if (mode === 'live') {
+      if (avgDurationEl) avgDurationEl.textContent = formatDurationHuman(kpis.avgSessionDurationSec);
+      if (longestTag) longestTag.textContent = `Max: ${formatDurationHuman(kpis.longestSessionSec)}`;
+      if (tlhBadge) tlhBadge.textContent = `${kpis.totalActiveListeningHours} TLH`;
+      if (card3FooterLeft) card3FooterLeft.innerHTML = `Active TLH (Live): <strong class="mono">${kpis.totalActiveListeningHours} hrs</strong>`;
+      if (card3FooterRight) card3FooterRight.innerHTML = `24h Total TLH: <strong class="mono">${kpis.totalListeningHours24h} hrs</strong>`;
+    } else {
+      const avgSec = activeBreakdowns.avgSessionDurationSec || 0;
+      const maxSec = activeBreakdowns.longestSessionSec || 0;
+      const medSec = activeBreakdowns.medianSessionDurationSec || 0;
+      const tlhVal = activeBreakdowns.totalListeningHours ?? (mode === '24h' ? kpis.totalListeningHours24h : 0);
+      if (avgDurationEl) avgDurationEl.textContent = formatDurationHuman(avgSec);
+      if (longestTag) longestTag.textContent = `Max: ${formatDurationHuman(maxSec)}`;
+      if (tlhBadge) tlhBadge.textContent = `${tlhVal} TLH`;
+      if (card3FooterLeft) card3FooterLeft.innerHTML = `Median Stay: <strong class="mono">${formatDurationHuman(medSec)}</strong>`;
+      const tlhLabel = mode === '24h' ? '24h Total TLH' : (mode === '7d' ? '7d Total TLH' : 'All-Time TLH');
+      if (card3FooterRight) card3FooterRight.innerHTML = `${tlhLabel}: <strong class="mono">${tlhVal} hrs</strong>`;
+    }
+
+    // 4. Geographic Reach & Sessions Card
+    const geoScopeBadge = document.getElementById('kpiGeoScopeBadge');
+    const dupConnectionsTag = document.getElementById('kpiDupConnectionsTag');
+    const countriesCountEl = document.getElementById('kpiCountriesCount');
+    const topCountryBadge = document.getElementById('kpiTopCountryBadge');
+    const card4FooterLeft = document.getElementById('kpiCard4FooterLeft');
+    const card4FooterRight = document.getElementById('kpiCard4FooterRight');
+
+    const activeCountries = mode === 'live' ? (breakdowns.countries || []) : (activeBreakdowns.countries || []);
+    const countriesCount = activeCountries.length;
+
+    if (geoScopeBadge) {
+      const cLabel = `${countriesCount} ${countriesCount === 1 ? 'country' : 'countries'}`;
+      if (mode === 'live') {
+        geoScopeBadge.className = 'time-bound-badge live';
+        geoScopeBadge.textContent = `● Live: ${cLabel}`;
+      } else if (mode === '24h') {
+        geoScopeBadge.className = 'time-bound-badge time-24h';
+        geoScopeBadge.textContent = `24h: ${cLabel}`;
+      } else if (mode === '7d') {
+        geoScopeBadge.className = 'time-bound-badge time-7d';
+        geoScopeBadge.textContent = `7d: ${cLabel}`;
+      } else {
+        geoScopeBadge.className = 'time-bound-badge alltime';
+        geoScopeBadge.textContent = `All-Time: ${cLabel}`;
+      }
+    }
+
+    if (countriesCountEl) countriesCountEl.textContent = countriesCount;
+
+    const topCountry = activeCountries[0];
+    if (topCountryBadge) {
+      topCountryBadge.innerHTML = topCountry
+        ? `<span style="display:inline-flex;align-items:center;gap:5px">Top: ${renderCountryFlag(topCountry.countryCode, topCountry.countryName, 15)} ${escapeHtml(topCountry.countryName)} (${topCountry.sharePct}%)</span>`
+        : 'Top: --';
+    }
+
+    if (mode === 'live') {
+      if (dupConnectionsTag) dupConnectionsTag.textContent = `${kpis.duplicateConnections} multi-stream`;
+      if (card4FooterLeft) card4FooterLeft.innerHTML = `24h Unique IPs: <strong class="mono">${kpis.uniqueIps24h}</strong>`;
+      if (card4FooterRight) card4FooterRight.innerHTML = `24h Sessions: <strong class="mono">${kpis.totalSessions24h}</strong>`;
+    } else {
+      const citiesCount = (activeBreakdowns.cities || []).length;
+      if (dupConnectionsTag) dupConnectionsTag.textContent = `${citiesCount} unique ${citiesCount === 1 ? 'city' : 'cities'}`;
+      const uniqueIps = activeBreakdowns.uniqueIps ?? (mode === '24h' ? kpis.uniqueIps24h : 0);
+      const totalSess = activeBreakdowns.totalSessions ?? (mode === '24h' ? kpis.totalSessions24h : 0);
+      const ipLabel = mode === '24h' ? 'Unique Listeners' : (mode === '7d' ? '7d Unique Listeners' : 'All-Time Listeners');
+      const sessLabel = mode === '24h' ? 'Total Sessions' : (mode === '7d' ? '7d Sessions' : 'All-Time Sessions');
+      if (card4FooterLeft) card4FooterLeft.innerHTML = `${ipLabel}: <strong class="mono">${uniqueIps}</strong>`;
+      if (card4FooterRight) card4FooterRight.innerHTML = `${sessLabel}: <strong class="mono">${totalSess}</strong>`;
+    }
+  }
+
   function renderAll() {
     if (!dashboardState) return;
     const { connection, stream, kpis, listeners, breakdowns, history, recentEvents } = dashboardState;
@@ -337,57 +567,8 @@
       if (opt) pollSel.value = String(connection.pollIntervalSec);
     }
 
-    // 2. KPI Cards
-    const capPct = Math.min(100, Math.round((kpis.currentListeners / (kpis.maxCapacity || 500)) * 100));
-    document.getElementById('kpiCurrentListeners').textContent = kpis.currentListeners;
-    const totalStreams = kpis.totalStreams || kpis.totalListenersRaw || kpis.currentListeners;
-    const streamSuffix = (totalStreams && totalStreams > kpis.currentListeners)
-      ? ` (${totalStreams} streams)`
-      : '';
-    document.getElementById('kpiUniqueIpsTag').textContent = `${kpis.uniqueIps} unique IPs${streamSuffix}`;
-
-    const botFilterBadge = document.getElementById('kpiBotsFilterBadge');
-    if (botFilterBadge) {
-      const botCount = kpis.botListenersCount || 0;
-      botFilterBadge.textContent = botCount > 0 ? `🤖 ${botCount} Bot${botCount === 1 ? '' : 's'} Ignored` : '🤖 Bots Ignored';
-      botFilterBadge.title = `${botCount} flagged bot/crawler/probe connections isolated from listener analytics`;
-      botFilterBadge.classList.remove('hidden');
-    }
-
-    document.getElementById('capacityPctBadge').textContent = `${capPct}% cap`;
-    document.getElementById('capacityMeterFill').style.width = `${Math.max(2, capPct)}%`;
-    document.getElementById('kpiMountName').textContent = connection.mount || '/listen';
-    document.getElementById('kpiMaxCapacity').textContent = kpis.maxCapacity || 500;
-
-    document.getElementById('kpiPeak24h').textContent = kpis.peak24h;
-    document.getElementById('kpiAllTimePeakBadge').textContent = `All-Time: ${kpis.allTimePeak}`;
-    const diffFromPeak = kpis.peak24h - kpis.currentListeners;
-    document.getElementById('kpiPeakDeltaTag').textContent =
-      diffFromPeak <= 0 ? 'At Peak Now!' : `-${diffFromPeak} from peak`;
-    document.getElementById('kpiPeakTime').textContent = new Date(kpis.peak24hTs).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    document.getElementById('kpiAvgDuration').textContent = formatDurationHuman(kpis.avgSessionDurationSec);
-    document.getElementById('kpiLongestTag').textContent = `Max: ${formatDurationHuman(kpis.longestSessionSec)}`;
-    document.getElementById('kpiTlhBadge').textContent = `${kpis.totalActiveListeningHours} TLH`;
-    document.getElementById('kpiActiveTlh').textContent = `${kpis.totalActiveListeningHours} hrs`;
-    document.getElementById('kpi24hTlh').textContent = `${kpis.totalListeningHours24h} hrs`;
-
-    document.getElementById('kpiCountriesCount').textContent = breakdowns.countries.length;
-    const topCountry = breakdowns.countries[0];
-    document.getElementById('kpiTopCountryBadge').innerHTML = topCountry
-      ? `<span style="display:inline-flex;align-items:center;gap:5px">Top: ${renderCountryFlag(topCountry.countryCode, topCountry.countryName, 15)} ${escapeHtml(topCountry.countryName)} (${topCountry.sharePct}%)</span>`
-      : 'Top: --';
-    document.getElementById('kpiDupConnectionsTag').textContent = `${kpis.duplicateConnections} multi-stream`;
-    document.getElementById('kpi24hUniqueIps').textContent = kpis.uniqueIps24h;
-    document.getElementById('kpi24hSessions').textContent = kpis.totalSessions24h;
-
-    const geoScopeBadge = document.getElementById('kpiGeoScopeBadge');
-    if (geoScopeBadge) {
-      geoScopeBadge.textContent = `● Live: ${breakdowns.countries.length} ${breakdowns.countries.length === 1 ? 'country' : 'countries'}`;
-    }
+    // 2. KPI Cards (dynamically reactive to active period scope)
+    renderKpiCards();
 
     const historyScopeBadge = document.getElementById('historyTimeScopeBadge');
     if (historyScopeBadge) {
@@ -2269,6 +2450,7 @@
         breakdownScopeMode = scope;
         localStorage.setItem('ozonecast_breakdown_scope', scope);
         updateScopeBadges();
+        renderKpiCards();
         if (dashboardState) {
           const activeBreakdowns = getActiveBreakdowns();
           renderGeoBreakdown(activeBreakdowns);
@@ -2298,7 +2480,7 @@
           '7d': 'Past 7 Days (SQLite)',
           all: 'All-Time Station History',
         };
-        showToast(`Audience breakdowns switched to: ${scopeNames[scope] || scope}`);
+        showToast(`Period scope switched to: ${scopeNames[scope] || scope}`);
       });
     });
 
