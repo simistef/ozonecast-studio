@@ -2559,48 +2559,67 @@
           </div>
         </div>
 
-        <div style="font-size:12.5px;font-weight:600;margin-top:4px">Recorded Sessions &amp; Disconnect Tracks</div>
-        <div style="display:flex;flex-direction:column;gap:6px;max-height:230px;overflow-y:auto">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+          <div style="font-size:12.5px;font-weight:600">Recorded Sessions &amp; Disconnect Tracks</div>
+          <div class="mono" style="font-size:11px;color:var(--text-muted)">${sessions.length} recorded session${sessions.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="dossier-sessions-list" style="display:flex;flex-direction:column;gap:8px">
           ${
             sessions.length === 0
-              ? `<div style="color:var(--text-muted);font-size:12px">No stored sessions yet.</div>`
+              ? `<div style="color:var(--text-muted);font-size:12px;padding:12px;background:var(--bg-canvas);border-radius:6px;border:1px solid var(--border-subtle);text-align:center">No stored sessions yet for this IP.</div>`
               : sessions
-                  .map(
-                    s => {
-                      const trackText = s.last_track || 'No track metadata recorded';
-                      const trackLabel = s.is_active ? 'Listening to:' : 'Left during:';
-                      const progSec = Number(s.last_track_progress_sec || 0);
-                      const progPill = progSec > 0
-                        ? `<span class="mono" style="font-size:11px;color:var(--accent-amber);background:hsla(28,95%,54%,0.14);padding:1px 6px;border-radius:3px;border:1px solid hsla(28,95%,54%,0.3);white-space:nowrap" title="Progress into song when session ended">at ${formatDurationClock(progSec)} (${formatDurationHuman(progSec)})</span>`
-                        : '';
-                      return `
-                  <div class="event-row" style="padding:9px 12px;border-radius:6px;background:var(--bg-canvas);border:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  .map((s, idx) => {
+                    const trackText = s.last_track || 'No track metadata recorded';
+                    const trackLabel = s.is_active ? 'Listening to:' : 'Left during:';
+                    const progSec = Number(s.last_track_progress_sec || 0);
+                    const progPill = progSec > 0
+                      ? `<span class="mono" style="font-size:11px;color:var(--accent-amber);background:hsla(28,95%,54%,0.14);padding:2px 7px;border-radius:3px;border:1px solid hsla(28,95%,54%,0.3);white-space:nowrap" title="Progress into song when session ended">at ${formatDurationClock(progSec)} (${formatDurationHuman(progSec)})</span>`
+                      : '';
+                    const isOverflow = idx >= 15;
+                    return `
+                  <div class="event-row ${isOverflow ? 'dossier-session-overflow hidden' : ''}" style="padding:10px 14px;border-radius:6px;background:var(--bg-canvas);border:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:14px">
                     <div style="flex:1;min-width:0">
                       <div style="display:flex;align-items:center;gap:6px">
                         <span style="font-weight:600">${escapeHtml(s.player)}</span>
                         <span style="font-size:11.5px;color:var(--text-muted)">(${escapeHtml(s.os)})</span>
                         ${s.is_active ? '<span class="status-badge live" style="padding:1px 6px;font-size:10px">Active</span>' : ''}
                       </div>
-                      <div style="display:flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;flex-wrap:wrap" title="${escapeHtml(trackText)}">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:12px;flex-wrap:wrap" title="${escapeHtml(trackText)}">
                         <span style="color:var(--accent-amber);font-size:12px">🎵</span>
                         <span style="font-size:11px;font-weight:600;color:var(--accent-amber)">${trackLabel}</span>
                         <span style="color:var(--text-primary);font-weight:500">${escapeHtml(trackText)}</span>
                         ${progPill}
                       </div>
-                      <div class="mono" style="font-size:10.5px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(s.user_agent)}">${escapeHtml(s.user_agent)}</div>
+                      <div class="mono" style="font-size:10.5px;color:var(--text-muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(s.user_agent)}">${escapeHtml(s.user_agent)}</div>
                     </div>
                     <div style="text-align:right;flex-shrink:0" class="mono">
                       <div style="color:var(--accent-emerald);font-weight:600">${formatDurationHuman(s.duration_seconds)}</div>
-                      <div style="font-size:10.5px;color:var(--text-muted);margin-top:2px">${new Date(s.last_seen).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                      <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px">${new Date(s.last_seen).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
                 `;
-                    }
-                  )
+                  })
                   .join('')
+          }
+          ${
+            sessions.length > 15
+              ? `<div style="text-align:center;padding:4px 0">
+                   <button type="button" id="dossierShowAllSessionsBtn" class="btn" style="font-size:11.5px;padding:6px 14px;background:var(--bg-canvas);border:1px solid var(--border-strong)">
+                     Show all ${sessions.length} recorded sessions (${sessions.length - 15} more)
+                   </button>
+                 </div>`
+              : ''
           }
         </div>
       `;
+
+      const showAllBtn = document.getElementById('dossierShowAllSessionsBtn');
+      if (showAllBtn) {
+        showAllBtn.addEventListener('click', () => {
+          content.querySelectorAll('.dossier-session-overflow').forEach(el => el.classList.remove('hidden'));
+          showAllBtn.parentElement?.remove();
+        });
+      }
 
       const nameInput = document.getElementById('ipFriendlyNameInput');
       if (nameInput) {
