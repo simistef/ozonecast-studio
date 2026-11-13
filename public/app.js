@@ -1132,14 +1132,54 @@
               </div>
             </div>
 
-            <div style="text-align:right;flex-shrink:0" class="mono">
-              <div style="font-size:13.5px;font-weight:700;color:var(--accent-crimson)">${song.uniqueIps} Unique IP${song.uniqueIps === 1 ? '' : 's'}</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${formatRelativeTime(song.lastDropTs)}</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+              <div style="text-align:right" class="mono">
+                <div style="font-size:13.5px;font-weight:700;color:var(--accent-crimson)">${song.uniqueIps} Unique IP${song.uniqueIps === 1 ? '' : 's'}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${formatRelativeTime(song.lastDropTs)}</div>
+              </div>
+              <button type="button" class="btn ignore-detractor-btn" data-track="${escapeHtml(song.track)}" title="Exclude &quot;${escapeHtml(song.track)}&quot; from detractor stats (e.g. downtime / test placeholder)" style="padding:4px 8px;font-size:11px;border-color:hsla(355,84%,60%,0.3);color:hsl(355,95%,80%);background:hsla(355,84%,60%,0.1)">
+                🚫 Exclude
+              </button>
             </div>
           </div>
         `;
       })
       .join('');
+
+    // Attach click handlers to row exclude buttons
+    listEl.querySelectorAll('.ignore-detractor-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const track = btn.getAttribute('data-track');
+        if (!track) return;
+        if (!confirm(`Exclude "${track}" from detractor rankings?\n\nThis will ignore this title (e.g. downtime / test stream placeholder) across detractor charts and KPIs.`)) {
+          return;
+        }
+        try {
+          btn.disabled = true;
+          btn.textContent = 'Excluding...';
+          const res = await fetch('/api/detractor-songs/ignore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ track, reason: 'Excluded by user from leaderboard' }),
+          });
+          const data = await res.json();
+          if (data.ok) {
+            showToast(`Excluded "${track}" from detractor statistics`);
+            await fetchDashboard();
+          } else {
+            showToast(data.error || 'Failed to exclude track', 'error');
+            btn.disabled = false;
+            btn.textContent = '🚫 Exclude';
+          }
+        } catch (err) {
+          console.error('Error excluding track:', err);
+          showToast('Error excluding track', 'error');
+          btn.disabled = false;
+          btn.textContent = '🚫 Exclude';
+        }
+      });
+    });
   }
 
   function renderGeoBreakdown(breakdowns) {
@@ -2429,6 +2469,77 @@
     }
   }
 
+  // Open Ignored Downtime & Test Stream Placeholders Modal
+  async function openIgnoredTracksModal() {
+    const backdrop = document.getElementById('ignoredTracksModalBackdrop');
+    const tbody = document.getElementById('ignoredTracksTableBody');
+    if (!backdrop || !tbody) return;
+
+    backdrop.classList.remove('hidden');
+    tbody.innerHTML = '<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text-secondary)">Loading excluded titles...</td></tr>';
+
+    try {
+      const res = await fetch('/api/detractor-songs/ignored');
+      const data = await res.json();
+      const list = data.ignoredTracks || [];
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text-muted)">No excluded titles. All track titles are active in detractor analysis.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(item => `
+        <tr style="border-bottom:1px solid var(--border-subtle)">
+          <td style="padding:8px 10px;font-weight:600;color:var(--text-primary)">
+            ${escapeHtml(item.track)}
+          </td>
+          <td style="padding:8px 10px;color:var(--text-secondary);font-size:11.5px">
+            ${escapeHtml(item.reason || 'Downtime / Test stream placeholder')}
+          </td>
+          <td style="padding:8px 10px;text-align:right">
+            <button type="button" class="btn unignore-track-btn" data-track="${escapeHtml(item.track)}" style="padding:3px 8px;font-size:11px" title="Restore this title to detractor analysis">
+              Restore
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('.unignore-track-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const track = btn.getAttribute('data-track');
+          if (!track) return;
+          try {
+            btn.disabled = true;
+            btn.textContent = 'Restoring...';
+            const unres = await fetch('/api/detractor-songs/unignore', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ track }),
+            });
+            const undata = await unres.json();
+            if (undata.ok) {
+              showToast(`Restored "${track}" to detractor analysis`);
+              await openIgnoredTracksModal();
+              await fetchDashboard();
+            } else {
+              showToast(undata.error || 'Failed to restore track', 'error');
+              btn.disabled = false;
+              btn.textContent = 'Restore';
+            }
+          } catch (err) {
+            console.error('Error restoring track:', err);
+            showToast('Error restoring track', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Restore';
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Error loading ignored detractor tracks:', err);
+      tbody.innerHTML = `<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--accent-crimson)">Failed to load excluded titles: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
   // Event Listeners Setup
   function setupInteractions() {
     // Map View Tabs ('europe' | 'romania' | 'world')
@@ -3188,6 +3299,48 @@
     const ipBackdrop = document.getElementById('ipModalBackdrop');
     document.getElementById('closeIpModalBtn')?.addEventListener('click', () => ipBackdrop.classList.add('hidden'));
     document.getElementById('closeIpModalFooterBtn')?.addEventListener('click', () => ipBackdrop.classList.add('hidden'));
+
+    // Ignored / Downtime Stream Placeholders Modal
+    const ignoredBackdrop = document.getElementById('ignoredTracksModalBackdrop');
+    document.getElementById('manageIgnoredTracksBtn')?.addEventListener('click', openIgnoredTracksModal);
+    document.getElementById('closeIgnoredTracksModalBtn')?.addEventListener('click', () => ignoredBackdrop?.classList.add('hidden'));
+    document.getElementById('closeIgnoredTracksModalFooterBtn')?.addEventListener('click', () => ignoredBackdrop?.classList.add('hidden'));
+
+    ignoredBackdrop?.addEventListener('click', (e) => {
+      if (e.target === ignoredBackdrop) {
+        ignoredBackdrop.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('addIgnoredTrackForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const trackInput = document.getElementById('newIgnoredTrackInput');
+      const reasonInput = document.getElementById('newIgnoredReasonInput');
+      const track = (trackInput?.value || '').trim();
+      const reason = (reasonInput?.value || 'User excluded downtime / test placeholder').trim();
+      if (!track) return;
+
+      try {
+        const res = await fetch('/api/detractor-songs/ignore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ track, reason }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`Excluded "${track}" from detractor statistics`);
+          if (trackInput) trackInput.value = '';
+          if (reasonInput) reasonInput.value = '';
+          await openIgnoredTracksModal();
+          await fetchDashboard();
+        } else {
+          showToast(data.error || 'Failed to exclude track', 'error');
+        }
+      } catch (err) {
+        console.error('Error adding ignored track:', err);
+        showToast('Error excluding track', 'error');
+      }
+    });
 
     window.addEventListener('resize', () => {
       if (dashboardState) {

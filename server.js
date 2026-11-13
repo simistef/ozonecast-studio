@@ -26,6 +26,9 @@ const {
   logCustomEvent,
   getDetractorSongs,
   getDetractorSummary,
+  getIgnoredDetractorTracks,
+  ignoreDetractorTrack,
+  unignoreDetractorTrack,
 } = require('./src/db');
 const { parseUserAgent, parseIcecastClientsPayload, deduplicateListenersByDevice } = require('./src/parser');
 const { lookupIp, resolveIpHighAccuracy } = require('./src/geoip');
@@ -666,6 +669,32 @@ app.get('/api/detractor-songs', (req, res) => {
   const songs = getDetractorSongs(rangeMinutes, mode, true, limit);
   const summary = getDetractorSummary(rangeMinutes, mode, true);
   res.json({ ok: true, rangeMinutes, excludeBots: true, songs, summary });
+});
+
+// API: Get ignored/downtime stream placeholders
+app.get('/api/detractor-songs/ignored', (_req, res) => {
+  res.json({ ok: true, ignoredTracks: getIgnoredDetractorTracks() });
+});
+
+// API: Add track to ignored detractor list
+app.post('/api/detractor-songs/ignore', (req, res) => {
+  const track = (req.body?.track || '').trim();
+  const reason = (req.body?.reason || 'Downtime / Test stream placeholder').trim();
+  if (!track) {
+    return res.status(400).json({ ok: false, error: 'Track title is required' });
+  }
+  const ok = ignoreDetractorTrack(track, reason);
+  res.json({ ok, track, message: `Excluded "${track}" from detractor rankings.` });
+});
+
+// API: Remove track from ignored detractor list
+app.post('/api/detractor-songs/unignore', (req, res) => {
+  const track = (req.body?.track || '').trim();
+  if (!track) {
+    return res.status(400).json({ ok: false, error: 'Track title is required' });
+  }
+  const ok = unignoreDetractorTrack(track);
+  res.json({ ok, track, message: `Restored "${track}" to detractor rankings.` });
 });
 
 // API: Time-of-Day Audience Profile & Day-of-Week Breakdown

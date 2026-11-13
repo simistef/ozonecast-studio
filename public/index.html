@@ -501,8 +501,11 @@
             <span>Detractor Songs — Listener Drop-Off Leaderboard</span>
             <span id="detractorScopeBadge" class="time-bound-badge time-24h">⏱️ Past 24h</span>
             <span id="detractorTotalDropsBadge" class="mount-tag" style="background:hsla(355,84%,60%,0.15);color:hsl(355,95%,80%);border-color:hsla(355,80%,65%,0.35);font-size:11px">📉 0 Unique IPs</span>
+            <button type="button" id="manageIgnoredTracksBtn" class="mount-tag" style="background:hsla(210,100%,60%,0.12);color:hsl(210,100%,75%);border:1px solid hsla(210,100%,60%,0.3);font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px" title="Manage excluded downtime / test stream placeholders">
+              🚫 Excluded Placeholders
+            </button>
           </h2>
-          <div class="panel-subtitle">Tracks with highest unique listener churn • Measured on unique listener IPs • Station Admin ("Me") &amp; bots excluded</div>
+          <div class="panel-subtitle">Tracks with highest unique listener churn • Measured on unique listener IPs • Station Admin ("Me"), bots &amp; downtime test streams excluded</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <div class="segmented-tabs" id="detractorScopeTabs">
@@ -743,9 +746,47 @@
     </div>
   </div>
 
+  <!-- Modal 4: Ignored Downtime & Test Stream Placeholders -->
+  <div id="ignoredTracksModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="ignoredTracksModalTitle">
+    <div class="modal-card" style="max-width:680px">
+      <div class="modal-header">
+        <h3 id="ignoredTracksModalTitle" class="mono">🚫 Excluded Stream Placeholders</h3>
+        <button class="modal-close" id="closeIgnoredTracksModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:12px;color:var(--text-secondary);line-height:1.5">
+          These non-music placeholders (e.g. downtime broadcasts, tests, connection messages) are ignored from the Detractor Songs drop-off leaderboard and detractor KPIs so real music isn't skewed.
+        </div>
+        <form id="addIgnoredTrackForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="newIgnoredTrackInput" placeholder="Placeholder title (e.g. Live Broadcast Stream)" required style="flex:1;min-width:220px;padding:8px 12px;background:var(--bg-elevated);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-size:12px" />
+          <input type="text" id="newIgnoredReasonInput" placeholder="Reason (optional)" style="flex:1;min-width:160px;padding:8px 12px;background:var(--bg-elevated);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-size:12px" />
+          <button type="submit" class="btn btn-primary" style="padding:8px 14px;font-size:12px">Exclude Title</button>
+        </form>
+        <div style="max-height:320px;overflow-y:auto;border:1px solid var(--border-color);border-radius:6px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:var(--bg-elevated);color:var(--text-secondary);text-align:left;border-bottom:1px solid var(--border-color)">
+                <th style="padding:8px 10px">Placeholder Title</th>
+                <th style="padding:8px 10px">Reason</th>
+                <th style="padding:8px 10px;text-align:right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="ignoredTracksTableBody">
+              <tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text-secondary)">Loading excluded titles...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span style="font-size:11px;color:var(--text-secondary)">Filters both leaderboard and detractor summary KPIs</span>
+        <button type="button" id="closeIgnoredTracksModalFooterBtn" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=14"></script>
-  <script src="/app.js?v=14"></script>
+  <script src="/world-map.js?v=15"></script>
+  <script src="/app.js?v=15"></script>
 </body>
 </html>

@@ -119,7 +119,54 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_geo_cache_ip ON ip_geo_cache(ip);
+
+  CREATE TABLE IF NOT EXISTS ignored_detractor_tracks (
+    track TEXT PRIMARY KEY,
+    reason TEXT DEFAULT '',
+    created_at INTEGER NOT NULL
+  );
 `);
+
+const BUILTIN_IGNORED_TRACKS = [
+  'Live Broadcast Stream',
+  'Live Broadcast',
+  'Live Stream',
+  'Live Broadcast Audio',
+  'Connecting to stream metadata...',
+  'Connecting to stream metadata',
+  'No track metadata recorded',
+  'No track metadata',
+  'No metadata',
+  'Unknown Track',
+  'Unknown',
+  'Stream Offline',
+  'Station Offline',
+  'Offline',
+  'Airtime - Offline',
+  'Downtime Stream',
+  'Downtime',
+  'OZONE.FM Live Stream',
+  'OZONE.FM',
+  'OZONE.FM Live',
+  'Test Track',
+  'Test Stream',
+  'Stream Test',
+  'Test',
+  'Testing',
+  '/listen',
+  '/live',
+  '/stream'
+];
+
+try {
+  const insertIgnoredStmt = db.prepare(`
+    INSERT OR IGNORE INTO ignored_detractor_tracks (track, reason, created_at)
+    VALUES (?, 'Built-in downtime / test stream placeholder', ?)
+  `);
+  for (const t of BUILTIN_IGNORED_TRACKS) {
+    insertIgnoredStmt.run(t, 1700000000000);
+  }
+} catch (_) {}
 
 const DEFAULT_CONFIG = {
   baseUrl: process.env.ICECAST_URL || 'https://live.ozone.fm:8443',
@@ -576,10 +623,19 @@ function getHistoricalTrackChanges(rangeMinutes = 60, sourceMode = null) {
       .all(since);
   }
 
+  const ignoredSet = new Set(BUILTIN_IGNORED_TRACKS.map(t => t.toLowerCase().trim()));
+  try {
+    const custom = db.prepare('SELECT track FROM ignored_detractor_tracks').all();
+    for (const c of custom) {
+      if (c.track) ignoredSet.add(c.track.toLowerCase().trim());
+    }
+  } catch (_) {}
+
   const transitions = [];
   let lastTrack = '';
   for (const s of snapRows) {
-    if (s.current_track && s.current_track !== lastTrack) {
+    const tNorm = (s.current_track || '').trim().toLowerCase();
+    if (s.current_track && s.current_track !== lastTrack && !ignoredSet.has(tNorm) && !tNorm.startsWith('/')) {
       lastTrack = s.current_track;
       transitions.push({
         ts: s.ts,
@@ -593,6 +649,8 @@ function getHistoricalTrackChanges(rangeMinutes = 60, sourceMode = null) {
   for (const ev of eventRows) {
     const track = (ev.details || '').replace(/^Now Playing:\s*/i, '').trim();
     if (!track) continue;
+    const tNorm = track.toLowerCase();
+    if (ignoredSet.has(tNorm) || tNorm.startsWith('/')) continue;
     const existing = transitions.find(t => t.track === track && Math.abs(t.ts - ev.ts) < 45000);
     if (!existing) {
       transitions.push({
@@ -1151,6 +1209,38 @@ function getDetractorSongs(rangeMinutes = 1440, sourceMode = null, excludeBots =
         AND last_track IS NOT NULL
         AND TRIM(last_track) != ''
         AND last_track != 'No track metadata recorded'
+        -- Exclude downtime / test stream placeholders and non-song tracks
+        AND LOWER(TRIM(last_track)) NOT IN (
+          SELECT LOWER(TRIM(track)) FROM ignored_detractor_tracks
+        )
+        AND LOWER(TRIM(last_track)) NOT IN (
+          'live broadcast stream',
+          'live broadcast',
+          'live stream',
+          'live broadcast audio',
+          'connecting to stream metadata...',
+          'connecting to stream metadata',
+          'no track metadata recorded',
+          'no track metadata',
+          'no metadata',
+          'unknown track',
+          'unknown',
+          'stream offline',
+          'station offline',
+          'offline',
+          'airtime - offline',
+          'downtime stream',
+          'downtime',
+          'ozone.fm live stream',
+          'ozone.fm',
+          'ozone.fm live',
+          'test track',
+          'test stream',
+          'stream test',
+          'test',
+          'testing'
+        )
+        AND last_track NOT LIKE '/%'
         ${since > 0 ? 'AND last_seen >= ?' : ''}
         ${modeFilter}
         -- Bots and crawlers are ALWAYS excluded from detractor songs
@@ -1266,6 +1356,38 @@ function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots
         AND last_track IS NOT NULL
         AND TRIM(last_track) != ''
         AND last_track != 'No track metadata recorded'
+        -- Exclude downtime / test stream placeholders and non-song tracks
+        AND LOWER(TRIM(last_track)) NOT IN (
+          SELECT LOWER(TRIM(track)) FROM ignored_detractor_tracks
+        )
+        AND LOWER(TRIM(last_track)) NOT IN (
+          'live broadcast stream',
+          'live broadcast',
+          'live stream',
+          'live broadcast audio',
+          'connecting to stream metadata...',
+          'connecting to stream metadata',
+          'no track metadata recorded',
+          'no track metadata',
+          'no metadata',
+          'unknown track',
+          'unknown',
+          'stream offline',
+          'station offline',
+          'offline',
+          'airtime - offline',
+          'downtime stream',
+          'downtime',
+          'ozone.fm live stream',
+          'ozone.fm',
+          'ozone.fm live',
+          'test track',
+          'test stream',
+          'stream test',
+          'test',
+          'testing'
+        )
+        AND last_track NOT LIKE '/%'
         ${since > 0 ? 'AND last_seen >= ?' : ''}
         ${modeFilter}
         -- Bots and crawlers are ALWAYS excluded
@@ -1329,6 +1451,41 @@ function getDetractorSummary(rangeMinutes = 1440, sourceMode = null, excludeBots
     avgPlaytimeWhenLeftSec: Number(row?.avg_playtime_when_left_sec || 0),
     totalLostListeningSec: Number(row?.total_lost_listening_sec || 0),
   };
+}
+
+function getIgnoredDetractorTracks() {
+  try {
+    return db.prepare('SELECT track, reason, created_at FROM ignored_detractor_tracks ORDER BY created_at DESC, track ASC').all();
+  } catch (_) {
+    return [];
+  }
+}
+
+function ignoreDetractorTrack(track, reason = 'Downtime / Test stream placeholder') {
+  if (!track || !track.trim()) return false;
+  const t = track.trim();
+  try {
+    db.prepare(`
+      INSERT INTO ignored_detractor_tracks (track, reason, created_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(track) DO UPDATE SET reason = excluded.reason
+    `).run(t, reason || 'Downtime / Test stream placeholder', Date.now());
+    return true;
+  } catch (err) {
+    console.error('Error ignoring detractor track:', err);
+    return false;
+  }
+}
+
+function unignoreDetractorTrack(track) {
+  if (!track || !track.trim()) return false;
+  try {
+    db.prepare('DELETE FROM ignored_detractor_tracks WHERE LOWER(TRIM(track)) = LOWER(TRIM(?))').run(track.trim());
+    return true;
+  } catch (err) {
+    console.error('Error unignoring detractor track:', err);
+    return false;
+  }
 }
 
 function getIpAliasesMap() {
@@ -2073,4 +2230,7 @@ module.exports = {
   setCachedGeoIp,
   getDetractorSongs,
   getDetractorSummary,
+  getIgnoredDetractorTracks,
+  ignoreDetractorTrack,
+  unignoreDetractorTrack,
 };
