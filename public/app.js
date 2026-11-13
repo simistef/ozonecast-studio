@@ -1093,6 +1093,9 @@
           item.city && item.city !== item.countryName && !item.city.startsWith('Unresolved') && item.city !== 'Unknown City' && item.city !== 'Unknown'
             ? `${escapeHtml(item.city)}, <span style="color:var(--text-secondary)">${escapeHtml(item.countryName || item.countryCode)}</span>`
             : escapeHtml(item.countryName || item.countryCode || 'Unknown');
+        const nameBadge = item.friendlyName
+          ? `<span style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.38);border-radius:4px;padding:1px 6px;font-size:11.5px;font-weight:600">${escapeHtml(item.friendlyName)}</span>`
+          : '';
         const itemBadges = getListenerBadges({
           ...item,
           allTimeRank: item.rank,
