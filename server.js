@@ -13,6 +13,7 @@ const {
   getHistoricalBreakdowns,
   getTimeOfDayProfile,
   getTopReturningListeners,
+  getListenersHistoricalSummary,
   getAggregatedStats,
   getIpHistory,
   getIpAliasesMap,
@@ -580,11 +581,22 @@ app.get('/api/dashboard', async (req, res) => {
     }
     botActivity.categories = Array.from(catMap.values()).filter(c => c.totalCount > 0);
 
-    const listenersWithAliases = allListeners.map(l => ({
-      ...l,
-      friendlyName: ipAliases[l.ip]?.friendlyName || '',
-      notes: ipAliases[l.ip]?.notes || '',
-    }));
+    const listenersSummary = getListenersHistoricalSummary(modeForHistory);
+
+    const listenersWithAliases = allListeners.map(l => {
+      const h = listenersSummary[l.ip] || null;
+      return {
+        ...l,
+        friendlyName: ipAliases[l.ip]?.friendlyName || '',
+        notes: ipAliases[l.ip]?.notes || '',
+        historySummary: h,
+        sessionCount: h?.sessionCount || 1,
+        allTimeRank: h?.allTimeRank || null,
+        totalDurationSeconds: h?.totalDurationSeconds || l.connectedSeconds || 0,
+        longestSessionSeconds: h?.longestSessionSeconds || l.connectedSeconds || 0,
+        firstSeen: h?.firstSeen || 0,
+      };
+    });
 
     res.json({
       ok: true,
@@ -636,6 +648,7 @@ app.get('/api/dashboard', async (req, res) => {
         maxCapacity: latestState.sourceMeta.maxListeners || config.maxListenersCapacity || 500,
       },
       listeners: listenersWithAliases,
+      listenersSummary,
       ipAliases,
       botActivity,
       breakdowns: {

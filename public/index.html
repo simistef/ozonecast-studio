@@ -273,6 +273,16 @@
             <option value="Bot / Ripper">Stream Rippers / Bots</option>
           </select>
 
+          <select id="badgeFilterSelect" class="select-control" aria-label="Filter by listener badge" title="Filter active listeners by loyalty &amp; frequency badge">
+            <option value="ALL">All Badges</option>
+            <option value="top">🌟 Top Listeners</option>
+            <option value="frequent">🔄 Frequent Listeners</option>
+            <option value="returning">🔁 Returning Listeners</option>
+            <option value="new">✨ New Listeners</option>
+            <option value="marathon">⚡ Marathon Listeners</option>
+            <option value="admin">👑 Station Admin ("Me")</option>
+          </select>
+
           <label class="topbar-check-label checked" id="dedupeToggleWrap" title="Group multiple streams on the same IP and player/agent into 1 listener. Separate players or user-agents on the same IP are counted as separate listeners.">
             <input type="checkbox" id="dedupeListenersCheckbox" checked />
             <span class="topbar-check-indicator"></span>
@@ -786,7 +796,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=15"></script>
-  <script src="/app.js?v=15"></script>
+  <script src="/world-map.js?v=16"></script>
+  <script src="/app.js?v=16"></script>
 </body>
 </html>

@@ -13,6 +13,7 @@
   let returningSortMode = localStorage.getItem('ozonecast_returning_sort') || 'total_time'; // 'total_time' | 'sessions'
   let tableSearchQuery = '';
   let tableCategoryFilter = 'ALL';
+  let tableBadgeFilter = 'ALL';
   let tableSortField = 'connectedSeconds';
   let tableSortAsc = false;
   let currentHistoryData = [];
@@ -129,6 +130,174 @@
     const ua = String(l.userAgent || '').replace(/\s+/g, ' ').trim().toLowerCase();
     const agentKey = (player || os) ? `${player}::${os}` : ua;
     return `${ip}::${agentKey}`;
+  }
+
+  // Listener Badges & Loyalty Classification
+  function getListenerBadges(listener, liveConnectedSeconds = 0) {
+    const badges = [];
+    if (!listener) return badges;
+
+    const friendlyName = (listener.friendlyName || '').trim();
+    const lowerName = friendlyName.toLowerCase();
+    const isMe = lowerName === 'me' || lowerName.startsWith('me ') || lowerName === 'admin' || lowerName.startsWith('admin ');
+    const isBot = Boolean(listener.isBot || listener.isManualBot || listener.ua?.isRipper || listener.ua?.category === 'Bot / Ripper');
+
+    // 1. Station Admin ("Me")
+    if (isMe) {
+      badges.push({
+        id: 'admin',
+        type: 'admin',
+        label: '👑 Station Admin',
+        shortLabel: '👑 Admin',
+        className: 'badge-admin',
+        tooltip: 'Station Admin IP ("Me") • Excluded from detractor statistics'
+      });
+    }
+
+    // 2. Bot / Stream Ripper
+    if (isBot) {
+      badges.push({
+        id: 'bot',
+        type: 'bot',
+        label: '🤖 Bot / Ripper',
+        shortLabel: '🤖 Bot',
+        className: 'badge-bot',
+        tooltip: 'Classified as stream ripper or automated crawler'
+      });
+      return badges;
+    }
+
+    const h = listener.historySummary || {};
+    const sessionCount = Number(h.sessionCount ?? listener.sessionCount ?? 1);
+    const totalDuration = Number(h.totalDurationSeconds ?? listener.totalDurationSeconds ?? liveConnectedSeconds);
+    const longestSession = Number(h.longestSessionSeconds ?? liveConnectedSeconds);
+    const allTimeRank = h.allTimeRank ?? listener.allTimeRank ?? null;
+    const firstSeen = Number(h.firstSeen ?? listener.firstSeen ?? 0);
+
+    // 3. Top Listener Rank Badges
+    if (allTimeRank && allTimeRank > 0) {
+      if (allTimeRank === 1) {
+        badges.push({
+          id: 'top',
+          type: 'top',
+          label: '🌟 Top #1 Listener',
+          shortLabel: '🌟 #1 Top',
+          className: 'badge-top-1',
+          tooltip: `#1 Top Listener station-wide • Total listening: ${formatDurationHuman(totalDuration)} (${sessionCount} visits)`
+        });
+      } else if (allTimeRank <= 3) {
+        badges.push({
+          id: 'top',
+          type: 'top',
+          label: `⭐ Top 3 (#${allTimeRank})`,
+          shortLabel: `⭐ Top #${allTimeRank}`,
+          className: 'badge-top',
+          tooltip: `Top 3 Listener station-wide (Rank #${allTimeRank}) • Total: ${formatDurationHuman(totalDuration)}`
+        });
+      } else if (allTimeRank <= 5) {
+        badges.push({
+          id: 'top',
+          type: 'top',
+          label: `⭐ Top 5 (#${allTimeRank})`,
+          shortLabel: `⭐ Top 5`,
+          className: 'badge-top',
+          tooltip: `Top 5 Listener station-wide (Rank #${allTimeRank}) • Total: ${formatDurationHuman(totalDuration)}`
+        });
+      } else if (allTimeRank <= 10) {
+        badges.push({
+          id: 'top',
+          type: 'top',
+          label: `⭐ Top 10 (#${allTimeRank})`,
+          shortLabel: `⭐ Top 10`,
+          className: 'badge-top',
+          tooltip: `Top 10 Listener station-wide (Rank #${allTimeRank}) • Total: ${formatDurationHuman(totalDuration)}`
+        });
+      }
+    }
+
+    // 4. Frequency & Return Badges
+    if (sessionCount >= 5) {
+      badges.push({
+        id: 'frequent',
+        type: 'frequent',
+        label: `🔄 Frequent (${sessionCount} visits)`,
+        shortLabel: `🔄 Frequent (${sessionCount}x)`,
+        className: 'badge-frequent',
+        tooltip: `Frequent repeat listener • ${sessionCount} distinct listening sessions recorded`
+      });
+    } else if (sessionCount >= 2) {
+      badges.push({
+        id: 'returning',
+        type: 'returning',
+        label: `🔁 Returning (${sessionCount} visits)`,
+        shortLabel: `🔁 Returning (${sessionCount}x)`,
+        className: 'badge-returning',
+        tooltip: `Returning listener • Has tuned in ${sessionCount} times`
+      });
+    } else {
+      // 1 session: check if new
+      const now = Date.now();
+      const isFirstVisit = !firstSeen || (now - firstSeen) < 48 * 3600 * 1000;
+      if (isFirstVisit) {
+        badges.push({
+          id: 'new',
+          type: 'new',
+          label: '✨ New Listener',
+          shortLabel: '✨ New',
+          className: 'badge-new',
+          tooltip: 'First-time listener • First seen on OzoneCast recently'
+        });
+      }
+    }
+
+    // 5. Marathon Listening Badges
+    const effectiveLiveSec = Math.max(liveConnectedSeconds, listener.connectedSeconds || 0);
+    if (effectiveLiveSec >= 7200 || longestSession >= 10800) {
+      const hrs = (effectiveLiveSec / 3600).toFixed(1);
+      badges.push({
+        id: 'marathon',
+        type: 'marathon',
+        label: `⚡ Marathon (${hrs}h)`,
+        shortLabel: `⚡ Marathon`,
+        className: 'badge-marathon',
+        tooltip: `Marathon listening session • Active for ${formatDurationHuman(effectiveLiveSec)} in a single session`
+      });
+    }
+
+    // 6. Superfan Badge (cumulative > 24 hours, if not #1 top)
+    if (totalDuration >= 86400 && allTimeRank !== 1) {
+      const totHrs = (totalDuration / 3600).toFixed(0);
+      badges.push({
+        id: 'superfan',
+        type: 'superfan',
+        label: `🏆 Superfan (${totHrs}h+)`,
+        shortLabel: `🏆 Superfan`,
+        className: 'badge-superfan',
+        tooltip: `Station Superfan • Accumulated over ${totHrs} hours of total listening time`
+      });
+    }
+
+    return badges;
+  }
+
+  function renderListenerBadgesHtml(badges, maxBadges = 3) {
+    if (!badges || badges.length === 0) return '';
+    const visible = badges.slice(0, maxBadges);
+    const extraCount = badges.length - visible.length;
+    const extraBadge = extraCount > 0
+      ? `<span class="listener-badge badge-top" style="opacity:0.85;font-size:10px;padding:1px 5px" title="${escapeHtml(badges.slice(maxBadges).map(b => b.label).join(', '))}">+${extraCount} more</span>`
+      : '';
+
+    return `
+      <div class="listener-badges-row">
+        ${visible.map(b => `
+          <span class="listener-badge ${escapeHtml(b.className)}" title="${escapeHtml(b.tooltip)}">
+            ${escapeHtml(b.label)}
+          </span>
+        `).join('')}
+        ${extraBadge}
+      </div>
+    `;
   }
 
   function isoToFlagEmoji(cc) {
@@ -924,9 +1093,11 @@
           item.city && item.city !== item.countryName && !item.city.startsWith('Unresolved') && item.city !== 'Unknown City' && item.city !== 'Unknown'
             ? `${escapeHtml(item.city)}, <span style="color:var(--text-secondary)">${escapeHtml(item.countryName || item.countryCode)}</span>`
             : escapeHtml(item.countryName || item.countryCode || 'Unknown');
-        const nameBadge = item.friendlyName
-          ? `<span style="background:hsla(28,95%,56%,0.16);color:var(--accent-amber);border:1px solid hsla(28,95%,56%,0.38);border-radius:4px;padding:1px 6px;font-size:11.5px;font-weight:600">${escapeHtml(item.friendlyName)}</span>`
-          : '';
+        const itemBadges = getListenerBadges({
+          ...item,
+          allTimeRank: item.rank,
+        }, item.longestSessionSeconds || 0);
+
         return `
           <div class="event-row" style="padding:10px 12px">
             <div style="display:flex;align-items:center;gap:10px;min-width:0">
@@ -940,6 +1111,7 @@
                   ${renderCountryFlag(item.countryCode, item.countryName, 18)}
                   <span style="font-weight:500">${locLabel}</span>
                   ${statusBadge}
+                  ${renderListenerBadgesHtml(itemBadges, 2)}
                 </div>
                 <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">
                   ${escapeHtml(item.player)} (${escapeHtml(item.os)}) • Avg visit: <span class="mono">${formatDurationHuman(item.avgDurationSeconds)}</span>
@@ -1799,10 +1971,17 @@
     const elapsedSec = getLiveElapsedSec();
     const q = tableSearchQuery.trim().toLowerCase();
 
-    let rows = (dashboardState.listeners || []).map(l => ({
-      ...l,
-      liveConnectedSeconds: (l.connectedSeconds || 0) + elapsedSec,
-    }));
+    let rows = (dashboardState.listeners || []).map(l => {
+      const liveConnectedSeconds = (l.connectedSeconds || 0) + elapsedSec;
+      const badges = getListenerBadges(l, liveConnectedSeconds);
+      const badgesText = badges.map(b => `${b.label} ${b.shortLabel || ''} ${b.type} ${b.id}`).join(' ').toLowerCase();
+      return {
+        ...l,
+        liveConnectedSeconds,
+        badges,
+        badgesText,
+      };
+    });
 
     if (excludeBotsSetting) {
       rows = rows.filter(r => !r.isBot);
@@ -1812,12 +1991,17 @@
       rows = rows.filter(r => r.ua?.category === tableCategoryFilter);
     }
 
+    if (tableBadgeFilter !== 'ALL') {
+      rows = rows.filter(r => r.badges.some(b => b.type === tableBadgeFilter || b.id === tableBadgeFilter));
+    }
+
     if (q) {
       rows = rows.filter(
         r =>
           r.ip.toLowerCase().includes(q) ||
           (r.friendlyName || '').toLowerCase().includes(q) ||
           (r.notes || '').toLowerCase().includes(q) ||
+          (r.badgesText || '').includes(q) ||
           (r.geo?.city || '').toLowerCase().includes(q) ||
           (r.geo?.countryName || '').toLowerCase().includes(q) ||
           (r.geo?.countryCode || '').toLowerCase().includes(q) ||
@@ -1853,6 +2037,8 @@
             group.liveConnectedSeconds = r.liveConnectedSeconds;
             group.connectedSeconds = r.connectedSeconds;
             group.clientId = r.clientId;
+            group.badges = r.badges;
+            group.badgesText = r.badgesText;
             if (r.ua?.player && r.ua.player !== 'Audio Client') {
               group.ua = r.ua;
               group.userAgent = r.userAgent;
@@ -1964,6 +2150,7 @@
                   <button type="button" class="copy-ip-btn" data-copy-ip="${escapeHtml(r.ip)}" title="Copy IP address">Copy</button>
                   ${dupHtml}
                 </div>
+                ${renderListenerBadgesHtml(r.badges)}
               </div>
             </td>
             <td>
@@ -2266,6 +2453,18 @@
         )
       );
 
+      const dossierListener = {
+        ip,
+        friendlyName: currentName,
+        isBot,
+        sessionCount: sum.session_count,
+        totalDurationSeconds: sum.total_seconds,
+        longestSessionSeconds: sum.longest_session,
+        firstSeen: sum.first_ever_seen,
+        allTimeRank: sum.all_time_rank,
+      };
+      const dossierBadges = getListenerBadges(dossierListener, activeProgressSec);
+
       title.textContent = currentName ? `${currentName} (${ip})` : `Listener Dossier — ${ip}`;
 
       content.innerHTML = `
@@ -2293,6 +2492,16 @@
               : `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">Tip: Name your own IP <code>Me</code> to automatically exclude your listening sessions from track drop-outs.</div>`
           }
         </form>
+
+        <div style="background:var(--bg-elevated);padding:10px 14px;border-radius:8px;border:1px solid var(--border-subtle);display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.04em">LISTENER BADGES &amp; LOYALTY PROFILE</span>
+            <span style="font-size:11.5px;color:var(--accent-amber);font-weight:600">${sum.all_time_rank ? `🌟 Rank #${sum.all_time_rank} Station-Wide` : 'Station Visitor'}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            ${renderListenerBadgesHtml(dossierBadges, 10)}
+          </div>
+        </div>
 
         <div style="background:var(--bg-elevated);padding:10px 14px;border-radius:8px;border:1px solid ${isBot ? 'hsla(355,84%,60%,0.4)' : 'var(--border-subtle)'};display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div>
@@ -2800,6 +3009,10 @@
     });
     document.getElementById('categoryFilterSelect')?.addEventListener('change', e => {
       tableCategoryFilter = e.target.value || 'ALL';
+      renderClientsTable();
+    });
+    document.getElementById('badgeFilterSelect')?.addEventListener('change', e => {
+      tableBadgeFilter = e.target.value || 'ALL';
       renderClientsTable();
     });
 

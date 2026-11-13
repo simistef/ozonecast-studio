@@ -600,11 +600,25 @@
                 c.ip +
                 ')'
               : c.ip;
+            let loyaltyTag = '';
+            if (c.allTimeRank === 1) {
+              loyaltyTag = ' <span class="listener-badge badge-top-1" style="font-size:9.5px;padding:0 4px">🌟 #1</span>';
+            } else if (c.allTimeRank && c.allTimeRank <= 5) {
+              loyaltyTag = ' <span class="listener-badge badge-top" style="font-size:9.5px;padding:0 4px">⭐ Top ' + c.allTimeRank + '</span>';
+            } else if (c.sessionCount >= 5) {
+              loyaltyTag = ' <span class="listener-badge badge-frequent" style="font-size:9.5px;padding:0 4px">🔄 Frequent</span>';
+            } else if (c.sessionCount >= 2) {
+              loyaltyTag = ' <span class="listener-badge badge-returning" style="font-size:9.5px;padding:0 4px">🔁 Returning</span>';
+            } else if (c.sessionCount === 1) {
+              loyaltyTag = ' <span class="listener-badge badge-new" style="font-size:9.5px;padding:0 4px">✨ New</span>';
+            }
+
             return (
               '<div class="mono" style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:3px">' +
               '<span>' +
               nameHtml +
               dupBadge +
+              loyaltyTag +
               ' • ' +
               (c.ua?.player || c.player || 'Audio Player') +
               '</span>' +

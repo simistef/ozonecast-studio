@@ -1609,6 +1609,47 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live', sortBy = 'tota
   }));
 }
 
+/**
+ * Returns a summary of historical session statistics and all-time station loyalty ranks
+ * for all human listeners in the specified source mode.
+ */
+function getListenersHistoricalSummary(sourceMode = 'live') {
+  try {
+    const rows = db.prepare(`
+      SELECT
+        ip,
+        COUNT(*) as session_count,
+        SUM(duration_seconds) as total_duration_seconds,
+        MAX(duration_seconds) as longest_session_seconds,
+        MIN(first_seen) as first_seen,
+        MAX(last_seen) as last_seen,
+        ROW_NUMBER() OVER (
+          ORDER BY SUM(duration_seconds) DESC, COUNT(*) DESC
+        ) as all_time_rank
+      FROM listener_sessions
+      WHERE source_mode = ?
+        AND (category != 'Bot / Ripper' AND ip NOT IN (SELECT ip FROM bot_ips))
+      GROUP BY ip
+    `).all(sourceMode);
+
+    const map = {};
+    for (const r of rows) {
+      map[r.ip] = {
+        sessionCount: Number(r.session_count) || 1,
+        totalDurationSeconds: Number(r.total_duration_seconds) || 0,
+        longestSessionSeconds: Number(r.longest_session_seconds) || 0,
+        firstSeen: Number(r.first_seen) || 0,
+        lastSeen: Number(r.last_seen) || 0,
+        allTimeRank: Number(r.all_time_rank) || null,
+      };
+    }
+    return map;
+  } catch (err) {
+    console.error('Error fetching listeners historical summary:', err);
+    return {};
+  }
+}
+
 function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
   const now = Date.now();
   const dayAgo = now - 24 * 3600 * 1000;
@@ -1816,6 +1857,31 @@ function getIpHistory(ip) {
       WHERE ip = ?
     `)
     .get(ip);
+
+  let allTimeRank = null;
+  try {
+    const rankRow = db.prepare(`
+      SELECT rank FROM (
+        SELECT
+          ip,
+          ROW_NUMBER() OVER (
+            ORDER BY SUM(duration_seconds) DESC, COUNT(*) DESC
+          ) as rank
+        FROM listener_sessions
+        WHERE category != 'Bot / Ripper' AND ip NOT IN (SELECT ip FROM bot_ips)
+        GROUP BY ip
+      ) WHERE ip = ?
+    `).get(ip);
+    if (rankRow && rankRow.rank) {
+      allTimeRank = Number(rankRow.rank);
+    }
+  } catch (_) {}
+
+  const enhancedSummary = {
+    ...(summary || {}),
+    all_time_rank: allTimeRank,
+  };
+
   const alias = getIpAlias(ip);
   const isBot = isBotIp(ip);
   const mostRecent = sessions[0];
@@ -1827,7 +1893,7 @@ function getIpHistory(ip) {
     friendlyName: alias?.friendlyName || '',
     notes: alias?.notes || '',
     isBot,
-    summary,
+    summary: enhancedSummary,
     lastExitTrack,
     lastExitTrackProgressSec,
     sessions,
@@ -2214,6 +2280,7 @@ module.exports = {
   getHistoricalBreakdowns,
   getTimeOfDayProfile,
   getTopReturningListeners,
+  getListenersHistoricalSummary,
   getAggregatedStats,
   getIpHistory,
   getIpAliasesMap,
