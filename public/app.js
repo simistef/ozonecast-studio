@@ -59,6 +59,10 @@
     if (typeof renderHistoryChart === 'function' && Array.isArray(currentHistoryData) && currentHistoryData.length > 0) {
       renderHistoryChart(currentHistoryData, currentTrackChanges);
     }
+    if (typeof renderTimeSlotsRadarChart === 'function' && dashboardState?.timeOfDay) {
+      renderTimeSlotsRadarChart(dashboardState.timeOfDay);
+      renderListeningTimeRadarChart(dashboardState.timeOfDay);
+    }
 
     if (notify) {
       const modeNames = {
@@ -1251,8 +1255,9 @@
       `;
     }
 
-    // 8. Render Weekly Spider Web (Radar) Chart for Listeners & Sessions
+    // 8. Render Weekly Spider Web (Radar) Charts
     renderTimeSlotsRadarChart(timeOfDay);
+    renderListeningTimeRadarChart(timeOfDay);
   }
 
   let radarMetricMode = 'both';
@@ -1416,15 +1421,17 @@
       }
     }
 
-    // Hover tooltip interaction on nearest spoke vertex
+    // Hover & touch tooltip interaction on nearest spoke vertex
     if (!canvas._radarBound) {
       canvas._radarBound = true;
-      canvas.addEventListener('mousemove', e => {
+      const handlePointer = e => {
         const tooltip = document.getElementById('radarTooltip');
         if (!tooltip || !dashboardState?.timeOfDay) return;
         const r = canvas.getBoundingClientRect();
-        const mx = e.clientX - r.left;
-        const my = e.clientY - r.top;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const mx = clientX - r.left;
+        const my = clientY - r.top;
         const curCx = r.width / 2;
         const curCy = r.height / 2 + 4;
         const dist = Math.hypot(mx - curCx, my - curCy);
@@ -1452,10 +1459,275 @@
         tooltip.style.left = `${Math.min(r.width - 10, Math.max(10, mx))}px`;
         tooltip.style.top = `${Math.max(40, my - 10)}px`;
         tooltip.classList.remove('hidden');
-      });
+      };
 
+      canvas.addEventListener('mousemove', handlePointer);
+      canvas.addEventListener('touchstart', handlePointer, { passive: true });
+      canvas.addEventListener('touchmove', handlePointer, { passive: true });
       canvas.addEventListener('mouseleave', () => {
         document.getElementById('radarTooltip')?.classList.add('hidden');
+      });
+      canvas.addEventListener('touchend', () => {
+        setTimeout(() => document.getElementById('radarTooltip')?.classList.add('hidden'), 2500);
+      });
+    }
+  }
+
+  let radarTimeMetricMode = 'both';
+
+  function renderListeningTimeRadarChart(timeOfDay) {
+    const canvas = document.getElementById('timeSlotsTimeRadarCanvas');
+    if (!canvas || !timeOfDay) return;
+
+    const days = Array.isArray(timeOfDay.daysOfWeek) ? timeOfDay.daysOfWeek : [];
+    const orderedKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const orderedDays = orderedKeys.map(k => days.find(d => d.key === k) || {
+      key: k,
+      name: k.charAt(0).toUpperCase() + k.slice(1),
+      avgSessionDurationSec: 0,
+      totalDurationSec: 0,
+      sessions: 0,
+      uniqueListeners: 0,
+    });
+
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(280, Math.floor(rect.width || canvas.parentElement.clientWidth || 440));
+    const h = Math.max(260, Math.floor(rect.height || 360));
+
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const gridColor = isLight ? 'rgba(15, 23, 42, 0.1)' : 'rgba(148, 163, 184, 0.14)';
+    const labelColor = isLight ? '#475569' : '#94a3b8';
+    const tickColor = isLight ? '#64748b' : '#94a3b8';
+    const tickBg = isLight ? 'rgba(255, 255, 255, 0.85)' : 'rgba(15, 23, 42, 0.85)';
+
+    const cx = w / 2;
+    const cy = h / 2 + 4;
+    const radius = Math.min(w, h) * 0.34;
+    const count = orderedDays.length; // 7
+    const rings = 5;
+
+    const avgVals = orderedDays.map(d => Number(d.avgSessionDurationSec || 0));
+    const totalVals = orderedDays.map(d => Number(d.totalDurationSec || 0));
+
+    const maxAvgSec = Math.max(0, ...avgVals);
+    const maxTotalSec = Math.max(0, ...totalVals);
+    const hasData = maxAvgSec > 0 || maxTotalSec > 0;
+
+    // Update legend peak labels
+    const avgLegend = document.getElementById('radarAvgTimeLegendLabel');
+    if (avgLegend) {
+      avgLegend.textContent = maxAvgSec > 0 ? `Average Stay (${formatDurationNoSeconds(maxAvgSec)})` : 'Average Stay';
+    }
+    const totalLegend = document.getElementById('radarTotalTimeLegendLabel');
+    if (totalLegend) {
+      totalLegend.textContent = maxTotalSec > 0 ? `Total Listening Time (${(maxTotalSec / 3600).toFixed(1)}h)` : 'Total Listening Time';
+    }
+
+    const angleFor = idx => -Math.PI / 2 + (idx * 2 * Math.PI) / count;
+
+    // Draw concentric heptagon rings
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = gridColor;
+    for (let r = 1; r <= rings; r++) {
+      const rr = (radius * r) / rings;
+      ctx.beginPath();
+      for (let i = 0; i < count; i++) {
+        const a = angleFor(i);
+        const px = cx + Math.cos(a) * rr;
+        const py = cy + Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // Draw radial spokes & day labels
+    ctx.font = '600 12px Inter, sans-serif';
+    for (let i = 0; i < count; i++) {
+      const a = angleFor(i);
+      const ex = cx + Math.cos(a) * radius;
+      const ey = cy + Math.sin(a) * radius;
+
+      ctx.strokeStyle = gridColor;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      const lx = cx + Math.cos(a) * (radius + 22);
+      const ly = cy + Math.sin(a) * (radius + 18);
+      const cosA = Math.cos(a);
+      if (Math.abs(cosA) < 0.2) ctx.textAlign = 'center';
+      else if (cosA > 0) ctx.textAlign = 'left';
+      else ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = labelColor;
+      ctx.fillText(orderedDays[i].name, lx, ly);
+    }
+
+    // Scale tick labels along top Sunday axis
+    ctx.font = '500 10.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (radarTimeMetricMode === 'average') {
+      const scaleMax = maxAvgSec > 0 ? Math.ceil(maxAvgSec * 1.15) : 300;
+      for (let r = 1; r <= rings; r++) {
+        const val = Math.round((scaleMax * r) / rings);
+        const ty = cy - (radius * r) / rings;
+        const txt = formatDurationNoSeconds(val);
+        const tw = ctx.measureText(txt).width + 6;
+        ctx.fillStyle = tickBg;
+        ctx.fillRect(cx - tw / 2, ty - 7, tw, 14);
+        ctx.fillStyle = tickColor;
+        ctx.fillText(txt, cx, ty);
+      }
+    } else if (radarTimeMetricMode === 'total') {
+      const maxHours = maxTotalSec / 3600;
+      const scaleMaxHours = maxHours > 0 ? Math.ceil(maxHours * 1.15) : 5;
+      for (let r = 1; r <= rings; r++) {
+        const val = (scaleMaxHours * r) / rings;
+        const ty = cy - (radius * r) / rings;
+        const txt = `${val >= 10 ? Math.round(val) : val.toFixed(1).replace('.0', '')}h`;
+        const tw = ctx.measureText(txt).width + 6;
+        ctx.fillStyle = tickBg;
+        ctx.fillRect(cx - tw / 2, ty - 7, tw, 14);
+        ctx.fillStyle = tickColor;
+        ctx.fillText(txt, cx, ty);
+      }
+    } else {
+      // Both mode: relative % of peak
+      for (let r = 1; r <= rings; r++) {
+        const pct = Math.round((r * 100) / rings);
+        const ty = cy - (radius * r) / rings;
+        const txt = `${pct}%`;
+        const tw = ctx.measureText(txt).width + 6;
+        ctx.fillStyle = tickBg;
+        ctx.fillRect(cx - tw / 2, ty - 7, tw, 14);
+        ctx.fillStyle = tickColor;
+        ctx.fillText(txt, cx, ty);
+      }
+    }
+
+    const drawSeriesWithRatios = (ratios, strokeColor, fillColor) => {
+      const pts = ratios.map((ratio, i) => {
+        const clamped = Math.max(0, Math.min(1, ratio));
+        const a = angleFor(i);
+        return {
+          x: cx + Math.cos(a) * (radius * clamped),
+          y: cy + Math.sin(a) * (radius * clamped),
+        };
+      });
+
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        if (idx === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = strokeColor;
+      ctx.stroke();
+
+      pts.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = strokeColor;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isLight ? '#ffffff' : '#0f172a';
+        ctx.stroke();
+      });
+    };
+
+    if (!hasData) {
+      ctx.font = '500 13px Inter, sans-serif';
+      ctx.fillStyle = labelColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('No duration data recorded yet', cx, cy);
+    } else {
+      if (radarTimeMetricMode === 'both' || radarTimeMetricMode === 'total') {
+        const scaleMaxSec = radarTimeMetricMode === 'total'
+          ? (Math.ceil((maxTotalSec / 3600) * 1.15) * 3600 || 3600)
+          : (maxTotalSec || 1);
+        const totalRatios = totalVals.map(v => (scaleMaxSec > 0 ? v / scaleMaxSec : 0));
+        drawSeriesWithRatios(totalRatios, 'hsl(268, 88%, 62%)', 'hsla(268, 88%, 62%, 0.20)');
+      }
+      if (radarTimeMetricMode === 'both' || radarTimeMetricMode === 'average') {
+        const scaleMaxSec = radarTimeMetricMode === 'average'
+          ? (Math.ceil(maxAvgSec * 1.15) || 300)
+          : (maxAvgSec || 1);
+        const avgRatios = avgVals.map(v => (scaleMaxSec > 0 ? v / scaleMaxSec : 0));
+        drawSeriesWithRatios(avgRatios, 'hsl(158, 85%, 44%)', 'hsla(158, 85%, 44%, 0.22)');
+      }
+    }
+
+    // Hover & touch tooltip interaction on nearest spoke vertex
+    if (!canvas._radarBound) {
+      canvas._radarBound = true;
+      const handlePointer = e => {
+        const tooltip = document.getElementById('radarTimeTooltip');
+        if (!tooltip || !dashboardState?.timeOfDay) return;
+        const r = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const mx = clientX - r.left;
+        const my = clientY - r.top;
+        const curCx = r.width / 2;
+        const curCy = r.height / 2 + 4;
+        const dist = Math.hypot(mx - curCx, my - curCy);
+        const curRad = Math.min(r.width, r.height) * 0.34;
+
+        if (dist > curRad + 35) {
+          tooltip.classList.add('hidden');
+          return;
+        }
+
+        let ang = Math.atan2(my - curCy, mx - curCx) + Math.PI / 2;
+        if (ang < 0) ang += Math.PI * 2;
+        const sector = Math.round((ang / (Math.PI * 2)) * 7) % 7;
+        const curDays = (dashboardState.timeOfDay.daysOfWeek || []);
+        const key = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][sector];
+        const dayObj = curDays.find(d => d.key === key);
+        if (!dayObj) return;
+
+        const avgSec = Number(dayObj.avgSessionDurationSec || 0);
+        const totalSec = Number(dayObj.totalDurationSec || 0);
+        const totalHours = (totalSec / 3600).toFixed(1);
+
+        tooltip.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px">${escapeHtml(dayObj.name)}</div>
+          <div class="mono" style="font-size:11.5px;color:hsl(158,85%,44%)">Avg Stay: <strong>${formatDurationHuman(avgSec)}</strong></div>
+          <div class="mono" style="font-size:11.5px;color:hsl(268,88%,62%)">Total Time: <strong>${formatDurationNoSeconds(totalSec)}</strong> (${totalHours}h)</div>
+          <div class="mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">Sessions: ${dayObj.sessions || 0} • Listeners: ${dayObj.uniqueListeners || 0}</div>
+        `;
+        tooltip.style.left = `${Math.min(r.width - 10, Math.max(10, mx))}px`;
+        tooltip.style.top = `${Math.max(40, my - 10)}px`;
+        tooltip.classList.remove('hidden');
+      };
+
+      canvas.addEventListener('mousemove', handlePointer);
+      canvas.addEventListener('touchstart', handlePointer, { passive: true });
+      canvas.addEventListener('touchmove', handlePointer, { passive: true });
+      canvas.addEventListener('mouseleave', () => {
+        document.getElementById('radarTimeTooltip')?.classList.add('hidden');
+      });
+      canvas.addEventListener('touchend', () => {
+        setTimeout(() => document.getElementById('radarTimeTooltip')?.classList.add('hidden'), 2500);
       });
     }
   }
@@ -4024,6 +4296,18 @@
         });
         if (dashboardState?.timeOfDay) {
           renderTimeSlotsRadarChart(dashboardState.timeOfDay);
+        }
+      });
+    });
+
+    document.querySelectorAll('#radarTimeMetricTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        radarTimeMetricMode = btn.getAttribute('data-radar-time-mode') || 'both';
+        document.querySelectorAll('#radarTimeMetricTabs .seg-btn').forEach(b => {
+          b.classList.toggle('active', b === btn);
+        });
+        if (dashboardState?.timeOfDay) {
+          renderListeningTimeRadarChart(dashboardState.timeOfDay);
         }
       });
     });

@@ -850,6 +850,7 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
         p90SessionDurationSec: 0,
         longestSessionSec: 0,
         sessionCount: 0,
+        totalDurationSec: 0,
       };
     }
     const sorted = [...durations].sort((a, b) => a - b);
@@ -860,6 +861,7 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
       p90SessionDurationSec: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))] || 0,
       longestSessionSec: sorted[sorted.length - 1] || 0,
       sessionCount: sorted.length,
+      totalDurationSec: total,
     };
   }
 
@@ -923,6 +925,19 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
   const todayDayIndex = new Date().getDay();
   const daysOfWeek = DAY_DEFS.map(d => {
     const p = profiles[d.key];
+    const ct = p?.connectedTime || {};
+    let totalSec = ct.totalDurationSec || 0;
+    let avgSec = ct.avgSessionDurationSec || 0;
+    // Fallback if session durations aren't logged but hourly snapshots are available:
+    if (totalSec === 0 && p?.hourly && p.hourly.length > 0) {
+      const sumAvg = p.hourly.reduce((acc, h) => acc + (h.avgListeners || 0), 0);
+      if (sumAvg > 0) {
+        totalSec = sumAvg * 3600; // Estimated listener-hours in seconds
+      }
+    }
+    if (avgSec === 0 && (sessionsByDay[d.key] || 0) > 0 && totalSec > 0) {
+      avgSec = Math.round(totalSec / sessionsByDay[d.key]);
+    }
     return {
       key: d.key,
       name: d.name,
@@ -937,6 +952,11 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
       samples: p.totalSamples,
       sessions: sessionsByDay[d.key] || 0,
       uniqueListeners: uniqueIpsByDay[d.key] ? uniqueIpsByDay[d.key].size : 0,
+      avgSessionDurationSec: avgSec,
+      totalDurationSec: totalSec,
+      totalListeningHours: Number((totalSec / 3600).toFixed(2)),
+      medianSessionDurationSec: ct.medianSessionDurationSec || 0,
+      longestSessionSec: ct.longestSessionSec || 0,
     };
   });
 

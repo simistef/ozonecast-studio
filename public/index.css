@@ -2465,7 +2465,20 @@ button, input, select, textarea {
   }
 }
 
-/* Weekly Spider Web (Radar) Chart */
+/* Weekly Spider Web (Radar) Charts */
+.radar-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .radar-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .radar-layout {
   display: flex;
   flex-direction: column;
@@ -2485,9 +2498,10 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 18px;
   font-size: 12px;
   color: var(--text-secondary);
+  flex-wrap: wrap;
 }
 
 .radar-legend-item {
@@ -2501,6 +2515,7 @@ button, input, select, textarea {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .radar-dot.listeners {
@@ -2511,6 +2526,16 @@ button, input, select, textarea {
 .radar-dot.sessions {
   background: hsl(28, 95%, 56%);
   box-shadow: 0 0 6px hsla(28, 95%, 56%, 0.5);
+}
+
+.radar-dot.avg-time {
+  background: hsl(158, 85%, 44%);
+  box-shadow: 0 0 6px hsla(158, 85%, 44%, 0.5);
+}
+
+.radar-dot.total-time {
+  background: hsl(268, 88%, 62%);
+  box-shadow: 0 0 6px hsla(268, 88%, 62%, 0.5);
 }
 
 /* ==============================================================================

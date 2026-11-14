@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=27" />
+  <link rel="stylesheet" href="/index.css?v=28" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -658,31 +658,64 @@
         </div>
       </div>
 
-      <!-- Weekly Spider Web (Radar) Visualization for Listeners & Sessions -->
-      <div class="panel" id="timeSlotsRadarPanel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2>
-              <span>Weekly Spider Web — Listeners &amp; Sessions</span>
-              <span class="time-bound-badge time-7d">7-Day Radar</span>
-            </h2>
-            <div class="panel-subtitle">Day-of-week distribution comparing unique listeners vs. total sessions across Sunday–Saturday</div>
+      <!-- Weekly Spider Web (Radar) Visualizations: 2-Panel Grid -->
+      <div class="radar-grid-2">
+        <!-- Radar 1: Listeners & Sessions -->
+        <div class="panel" id="timeSlotsRadarPanel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>
+                <span>Weekly Spider Web — Listeners &amp; Sessions</span>
+                <span class="time-bound-badge time-7d">7-Day Radar</span>
+              </h2>
+              <div class="panel-subtitle">Day-of-week distribution comparing unique listeners vs. total sessions across Sunday–Saturday</div>
+            </div>
+            <div class="segmented-tabs" id="radarMetricTabs" role="tablist" aria-label="Spider web metric filter">
+              <button type="button" class="seg-btn active" data-radar-mode="both">Both</button>
+              <button type="button" class="seg-btn" data-radar-mode="listeners">Listeners</button>
+              <button type="button" class="seg-btn" data-radar-mode="sessions">Sessions</button>
+            </div>
           </div>
-          <div class="segmented-tabs" id="radarMetricTabs" role="tablist" aria-label="Spider web metric filter">
-            <button type="button" class="seg-btn active" data-radar-mode="both">Both</button>
-            <button type="button" class="seg-btn" data-radar-mode="listeners">Listeners</button>
-            <button type="button" class="seg-btn" data-radar-mode="sessions">Sessions</button>
+          <div class="panel-body">
+            <div class="radar-layout">
+              <div class="radar-canvas-wrap">
+                <canvas id="timeSlotsRadarCanvas"></canvas>
+                <div id="radarTooltip" class="chart-tooltip hidden"></div>
+              </div>
+              <div class="radar-legend-row">
+                <span class="radar-legend-item"><span class="radar-dot listeners"></span> Unique Listeners</span>
+                <span class="radar-legend-item"><span class="radar-dot sessions"></span> Total Sessions</span>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="panel-body">
-          <div class="radar-layout">
-            <div class="radar-canvas-wrap">
-              <canvas id="timeSlotsRadarCanvas"></canvas>
-              <div id="radarTooltip" class="chart-tooltip hidden"></div>
+
+        <!-- Radar 2: Average & Total Listening Time -->
+        <div class="panel" id="timeSlotsTimeRadarPanel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <h2>
+                <span>Weekly Spider Web — Average &amp; Total Listening Time</span>
+                <span class="time-bound-badge time-7d">7-Day Radar</span>
+              </h2>
+              <div class="panel-subtitle">Day-of-week distribution comparing average session duration vs. total listening time (TLH) across Sunday–Saturday</div>
             </div>
-            <div class="radar-legend-row">
-              <span class="radar-legend-item"><span class="radar-dot listeners"></span> Unique Listeners</span>
-              <span class="radar-legend-item"><span class="radar-dot sessions"></span> Total Sessions</span>
+            <div class="segmented-tabs" id="radarTimeMetricTabs" role="tablist" aria-label="Spider web listening time metric filter">
+              <button type="button" class="seg-btn active" data-radar-time-mode="both">Both</button>
+              <button type="button" class="seg-btn" data-radar-time-mode="average">Average Stay</button>
+              <button type="button" class="seg-btn" data-radar-time-mode="total">Total Time</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="radar-layout">
+              <div class="radar-canvas-wrap">
+                <canvas id="timeSlotsTimeRadarCanvas"></canvas>
+                <div id="radarTimeTooltip" class="chart-tooltip hidden"></div>
+              </div>
+              <div class="radar-legend-row">
+                <span class="radar-legend-item"><span class="radar-dot avg-time"></span> <span id="radarAvgTimeLegendLabel">Average Stay</span></span>
+                <span class="radar-legend-item"><span class="radar-dot total-time"></span> <span id="radarTotalTimeLegendLabel">Total Listening Time</span></span>
+              </div>
             </div>
           </div>
         </div>
@@ -1257,7 +1290,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=27"></script>
-  <script src="/app.js?v=27"></script>
+  <script src="/world-map.js?v=28"></script>
+  <script src="/app.js?v=28"></script>
 </body>
 </html>
