@@ -793,6 +793,53 @@
 
     // 7. Detected Bots, Scrapers & Monitoring Probes Card
     renderBotCard(dashboardState.botActivity);
+
+    // 8. Persistent Right Live Data Sidebar & Left Nav Badges
+    renderLiveSidebar();
+  }
+
+  function renderLiveSidebar() {
+    if (!dashboardState) return;
+    const { connection, stream, kpis, breakdowns, botActivity } = dashboardState;
+    const activeBreakdowns = getActiveBreakdowns() || breakdowns || {};
+
+    const liveListeners = kpis?.currentListeners ?? 0;
+    const periodSessions = activeBreakdowns?.totalSessions ?? kpis?.totalSessions24h ?? 0;
+    const peak24h = kpis?.peak24h ?? 0;
+    const peakTs = kpis?.peak24hTs ? new Date(kpis.peak24hTs).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--:--';
+    const allTimePeak = kpis?.allTimePeak ?? 0;
+    const formatLabel = (stream?.contentType || 'audio/aacp').includes('aac') ? 'AAC+' : 'MP3';
+    const activeBotsCount = botActivity?.activeCount ?? kpis?.botListenersCount ?? 0;
+
+    const setEl = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    setEl('sidebarLiveListeners', liveListeners);
+    setEl('sidebarPeriodSessions', periodSessions);
+    setEl('sidebarPeakListeners', peak24h);
+    setEl('sidebarPeakTime', peakTs);
+    setEl('sidebarServerListeners', liveListeners);
+    setEl('sidebarServerPeak', allTimePeak);
+    setEl('sidebarServerMount', connection?.mount || '/listen');
+    setEl('sidebarServerFormat', `${stream?.bitrate || 320} kbps ${formatLabel}`);
+
+    const botsBtn = document.getElementById('sidebarBotsCountBtn');
+    if (botsBtn) {
+      botsBtn.textContent = `${activeBotsCount} active`;
+    }
+
+    const navListenersBadge = document.getElementById('navListenersBadge');
+    if (navListenersBadge) {
+      navListenersBadge.textContent = liveListeners;
+    }
+
+    const navBotsBadge = document.getElementById('navBotsBadge');
+    if (navBotsBadge) {
+      navBotsBadge.textContent = activeBotsCount;
+      navBotsBadge.classList.toggle('hidden', activeBotsCount <= 0);
+    }
   }
 
   function renderTimeOfDayAndConnectedStats(timeOfDay, kpis) {
@@ -3585,6 +3632,103 @@
     });
   }
 
+  const VIEW_META = {
+    overview: {
+      title: 'Overview',
+      subtitle: 'Real-time KPIs, historical listener trends, and live connection activity',
+    },
+    listeners: {
+      title: 'Listeners',
+      subtitle: 'Connected Icecast clients, loyalty badges, and Top 5 returning listeners',
+    },
+    origin: {
+      title: 'Origin',
+      subtitle: 'Interactive world geolocation map, country rankings, and city breakdown',
+    },
+    schedule: {
+      title: 'Time Slots',
+      subtitle: '24-hour audience profile, dayparts, and 7-day listening schedule',
+    },
+    detractors: {
+      title: 'Top & Flop',
+      subtitle: 'Detractor songs, tune-out drop-off leaderboard, and placeholder exclusions',
+    },
+    players: {
+      title: 'Players',
+      subtitle: 'Media players, client categories, and operating system distribution',
+    },
+    bots: {
+      title: 'Bots & Probes',
+      subtitle: 'Detected automated crawlers, stream rippers, and monitoring probes',
+    },
+  };
+
+  function setActiveNavView(viewKey) {
+    const key = VIEW_META[viewKey] ? viewKey : 'overview';
+
+    document.querySelectorAll('#sideNav .side-nav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-nav') === key);
+    });
+
+    document.querySelectorAll('.nav-view').forEach(view => {
+      view.classList.toggle('active', view.getAttribute('data-view') === key);
+    });
+
+    const titleEl = document.getElementById('activeViewTitle');
+    const subEl = document.getElementById('activeViewSubtitle');
+    if (titleEl) titleEl.textContent = VIEW_META[key].title;
+    if (subEl) subEl.textContent = VIEW_META[key].subtitle;
+
+    try {
+      localStorage.setItem('ozonecast_active_view', key);
+    } catch (_) {}
+
+    if (window.location.hash !== `#${key}`) {
+      history.replaceState(null, '', `#${key}`);
+    }
+
+    // Re-render size-dependent canvases/charts after view becomes visible
+    if (dashboardState) {
+      requestAnimationFrame(() => {
+        if (key === 'overview') {
+          renderHistoryChart(dashboardState.history, dashboardState.trackChanges);
+        } else if (key === 'schedule') {
+          renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, dashboardState.kpis);
+        }
+      });
+    }
+  }
+
+  function setupNavigation() {
+    document.querySelectorAll('#sideNav .side-nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setActiveNavView(btn.getAttribute('data-nav'));
+      });
+    });
+
+    document.querySelectorAll('[data-nav-jump]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setActiveNavView(btn.getAttribute('data-nav-jump'));
+      });
+    });
+
+    document.getElementById('sidebarManageIgnoredBtn')?.addEventListener('click', () => {
+      document.getElementById('manageIgnoredTracksBtn')?.click();
+    });
+
+    window.addEventListener('hashchange', () => {
+      const hashKey = (window.location.hash || '').replace(/^#/, '');
+      if (VIEW_META[hashKey]) setActiveNavView(hashKey);
+    });
+
+    const hashInit = (window.location.hash || '').replace(/^#/, '');
+    let savedView = 'overview';
+    try {
+      savedView = localStorage.getItem('ozonecast_active_view') || 'overview';
+    } catch (_) {}
+    setActiveNavView(VIEW_META[hashInit] ? hashInit : savedView);
+  }
+
   function startVuAnimation(container) {
     if (!container) return;
     container.classList.add('active');
@@ -3627,6 +3771,7 @@
   }
 
   // Initialize
+  setupNavigation();
   setupInteractions();
   fetchDashboard();
   restartFrontendTimer(10);

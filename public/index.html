@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=18" />
+  <link rel="stylesheet" href="/index.css?v=19" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -35,30 +35,6 @@
             <span id="streamFormatSpec" class="mono">320 kbps AAC+</span>
           </div>
         </div>
-      </div>
-
-      <!-- Built-in Stream Audio Preview & Metadata Ticker -->
-      <div class="stream-monitor" aria-label="Live stream audio monitor">
-        <button id="toggleAudioBtn" class="play-stream-btn" title="Listen to live stream (https://live.ozone.fm:8443/listen)" aria-label="Toggle live audio stream">
-          <svg id="playIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="6 4 20 12 6 20 6 4"></polygon>
-          </svg>
-        </button>
-        <div class="stream-meta-col">
-          <div class="stream-now-playing-label">
-            <span>ON AIR MONITOR</span>
-            <span id="lastUpdatedClock" class="mono">--:--:--</span>
-          </div>
-          <div id="nowPlayingTitle" class="stream-track-title">Connecting to stream metadata...</div>
-        </div>
-        <div id="vuMeterBars" class="vu-bars" aria-hidden="true">
-          <div class="vu-bar"></div>
-          <div class="vu-bar"></div>
-          <div class="vu-bar"></div>
-          <div class="vu-bar"></div>
-          <div class="vu-bar"></div>
-        </div>
-        <audio id="liveStreamAudio" preload="none" crossorigin="anonymous"></audio>
       </div>
 
       <!-- Station Settings & Diagnostic Controls -->
@@ -156,10 +132,85 @@
     </div>
   </section>
 
-  <!-- Main Telemetry Workspace -->
-  <main class="workspace">
-    <!-- 4-Card KPI Strip -->
-    <section class="kpi-grid" aria-label="Key station metrics">
+  <!-- 3-Column Broadcast Dashboard Shell (Left Nav + Main View + Right Live Data Sidebar) -->
+  <div class="app-shell">
+    <!-- Left Vertical Navigation Rail -->
+    <nav class="side-nav" id="sideNav" aria-label="Dashboard sections">
+      <button type="button" class="side-nav-item active" data-nav="overview" title="Overview — KPIs, Listener Trends & Live Event Feed">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+        </svg>
+        <span class="side-nav-label">Overview</span>
+      </button>
+
+      <button type="button" class="side-nav-item" data-nav="listeners" title="Listeners — Connected Clients & Top 5 Returning Listeners">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+        <span class="side-nav-label">Listeners</span>
+        <span id="navListenersBadge" class="side-nav-badge">0</span>
+      </button>
+
+      <button type="button" class="side-nav-item" data-nav="origin" title="Origin — World Geolocation Map & Country/City Breakdown">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+          <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+        <span class="side-nav-label">Origin</span>
+      </button>
+
+      <button type="button" class="side-nav-item" data-nav="schedule" title="Time Slots — 24-Hour Audience Profile & Day-of-Week Schedule">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+        <span class="side-nav-label">Time Slots</span>
+      </button>
+
+      <button type="button" class="side-nav-item" data-nav="detractors" title="Top & Flop — Detractor Songs & Drop-Off Leaderboard">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 17l9.2-9.2M17 17V7H7"></path>
+        </svg>
+        <span class="side-nav-label">Top &amp; Flop</span>
+      </button>
+
+      <button type="button" class="side-nav-item" data-nav="players" title="Players — User-Agents, Media Players, OS & Platforms">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+        <span class="side-nav-label">Players</span>
+      </button>
+
+      <button type="button" class="side-nav-item" data-nav="bots" title="Bots & Probes — Detected Scrapers, Rippers & Health Monitors">
+        <svg class="side-nav-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <span class="side-nav-label">Bots &amp; Probes</span>
+        <span id="navBotsBadge" class="side-nav-badge hidden">0</span>
+      </button>
+    </nav>
+
+    <!-- Main Telemetry Workspace -->
+    <main class="workspace">
+      <div class="view-header">
+        <h2 id="activeViewTitle" class="view-title">Overview</h2>
+        <span id="activeViewSubtitle" class="view-subtitle">Real-time KPIs, historical listener trends, and live connection activity</span>
+      </div>
+
+      <!-- VIEW 1: Overview -->
+      <div class="nav-view active" data-view="overview">
+        <!-- 4-Card KPI Strip -->
+        <section class="kpi-grid" aria-label="Key station metrics">
       <article class="kpi-card">
         <div class="kpi-header">
           <div style="display:flex;align-items:center;gap:6px">
@@ -241,6 +292,67 @@
       </article>
     </section>
 
+    <!-- Row 2: Historical Listener Trends (SQLite) + Session Duration Histogram / Live Event Feed -->
+    <section class="row-split">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>
+              <span>Historical Listener Trend &amp; Peak Curve</span>
+              <span id="historyTimeScopeBadge" class="time-bound-badge time-24h">⏱️ 1h Window</span>
+              <span id="historyTrackCountBadge" class="mount-tag" style="background:hsla(280,75%,55%,0.15);color:hsl(280,95%,85%);border-color:hsla(280,80%,65%,0.35);font-size:11px">🎵 0 track changes</span>
+            </h2>
+            <div class="panel-subtitle">Time-series concurrency stored in local SQLite database with song changes</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label class="topbar-check-label checked" id="historyShowTracksWrap" style="padding:4px 9px;font-size:11.5px" title="Show or hide vertical track change markers on the curve">
+              <input type="checkbox" id="historyShowTracksCheckbox" checked />
+              <span class="topbar-check-indicator" style="width:13px;height:13px"></span>
+              <span class="topbar-check-text">Track Markers</span>
+            </label>
+            <div class="segmented-tabs" id="historyRangeTabs">
+              <button class="seg-btn" data-range="15">15m</button>
+              <button class="seg-btn active" data-range="60">1h</button>
+              <button class="seg-btn" data-range="360">6h</button>
+              <button class="seg-btn" data-range="1440">24h</button>
+              <button class="seg-btn" data-range="10080">7d</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="chart-container">
+            <canvas id="historyChartCanvas"></canvas>
+            <div id="historyTooltip" class="chart-tooltip hidden"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>
+              <span id="rightMidPanelTitle">Listener Retention &amp; Tune-In Duration</span>
+              <span id="retentionTimeScopeBadge" class="time-bound-badge live">Live Cohort</span>
+            </h2>
+            <div class="panel-subtitle" id="rightMidPanelSub">Distribution of active listener loyalty cohorts</div>
+          </div>
+          <div class="segmented-tabs">
+            <button class="seg-btn active" id="tabRetentionBtn">Retention</button>
+            <button class="seg-btn" id="tabEventFeedBtn">Join / Leave Log</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="retentionBucketList" class="dist-list"></div>
+          <div id="eventFeedContainer" class="event-feed" style="display:none"></div>
+        </div>
+      </div>
+    </section>
+
+
+      </div>
+
+      <!-- VIEW 2: Listeners -->
+      <div class="nav-view" data-view="listeners">
     <!-- Connected Icecast Clients Table (/admin/listclients.xsl?mount=/listen) -->
     <section class="panel" aria-label="Connected Icecast clients table">
       <div class="panel-header">
@@ -321,6 +433,41 @@
       </div>
     </section>
 
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>
+              <span>Top 5 Returning Listeners</span>
+              <span class="time-bound-badge alltime" title="Ranked across all completed & active sessions stored in SQLite">🏆 All-Time History</span>
+            </h2>
+            <div class="panel-subtitle">Most loyal repeat listeners across all recorded station history (bots excluded • filtered by min. avg connected time)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="returningSortByQuickSelect" class="select-control" title="Rank returning listeners by total listening time or session count" aria-label="Rank returning listeners">
+              <option value="total_time" selected>Sort: Total Time</option>
+              <option value="sessions">Sort: Sessions</option>
+            </select>
+            <select id="returningMinAvgQuickSelect" class="select-control" title="Minimum average session duration to qualify for Top 5 Returning Listeners" aria-label="Minimum average session duration">
+              <option value="0">Min Avg: Any (0s)</option>
+              <option value="30">Min Avg: 30 sec</option>
+              <option value="60" selected>Min Avg: 1 min (60s)</option>
+              <option value="120">Min Avg: 2 min</option>
+              <option value="300">Min Avg: 5 min</option>
+              <option value="600">Min Avg: 10 min</option>
+              <option value="900">Min Avg: 15 min</option>
+            </select>
+            <span id="returningTotalTag" class="mount-tag">SQLite Tracked</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="topReturningList" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+      </div>
+
+      <!-- VIEW 3: Origin -->
+      <div class="nav-view" data-view="origin">
     <!-- Row 1: Interactive World Geolocation Map + Country / City Breakdown -->
     <section class="row-split">
       <div class="panel">
@@ -371,64 +518,11 @@
       </div>
     </section>
 
-    <!-- Row 2: Historical Listener Trends (SQLite) + Session Duration Histogram / Live Event Feed -->
-    <section class="row-split">
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2>
-              <span>Historical Listener Trend &amp; Peak Curve</span>
-              <span id="historyTimeScopeBadge" class="time-bound-badge time-24h">⏱️ 1h Window</span>
-              <span id="historyTrackCountBadge" class="mount-tag" style="background:hsla(280,75%,55%,0.15);color:hsl(280,95%,85%);border-color:hsla(280,80%,65%,0.35);font-size:11px">🎵 0 track changes</span>
-            </h2>
-            <div class="panel-subtitle">Time-series concurrency stored in local SQLite database with song changes</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <label class="topbar-check-label checked" id="historyShowTracksWrap" style="padding:4px 9px;font-size:11.5px" title="Show or hide vertical track change markers on the curve">
-              <input type="checkbox" id="historyShowTracksCheckbox" checked />
-              <span class="topbar-check-indicator" style="width:13px;height:13px"></span>
-              <span class="topbar-check-text">Track Markers</span>
-            </label>
-            <div class="segmented-tabs" id="historyRangeTabs">
-              <button class="seg-btn" data-range="15">15m</button>
-              <button class="seg-btn active" data-range="60">1h</button>
-              <button class="seg-btn" data-range="360">6h</button>
-              <button class="seg-btn" data-range="1440">24h</button>
-              <button class="seg-btn" data-range="10080">7d</button>
-            </div>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="chart-container">
-            <canvas id="historyChartCanvas"></canvas>
-            <div id="historyTooltip" class="chart-tooltip hidden"></div>
-          </div>
-        </div>
+
       </div>
 
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2>
-              <span id="rightMidPanelTitle">Listener Retention &amp; Tune-In Duration</span>
-              <span id="retentionTimeScopeBadge" class="time-bound-badge live">Live Cohort</span>
-            </h2>
-            <div class="panel-subtitle" id="rightMidPanelSub">Distribution of active listener loyalty cohorts</div>
-          </div>
-          <div class="segmented-tabs">
-            <button class="seg-btn active" id="tabRetentionBtn">Retention</button>
-            <button class="seg-btn" id="tabEventFeedBtn">Join / Leave Log</button>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div id="retentionBucketList" class="dist-list"></div>
-          <div id="eventFeedContainer" class="event-feed" style="display:none"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Row 2.5: 24-Hour Time-of-Day Listener Schedule + Top 5 Returning Listeners Leaderboard -->
-    <section class="row-split" aria-label="Time of day schedule and Top 5 returning listeners">
+      <!-- VIEW 4: Time Slots -->
+      <div class="nav-view" data-view="schedule">
       <div class="panel" id="timeOfDayPanel">
         <div class="panel-header">
           <div class="panel-title-group">
@@ -470,39 +564,10 @@
           <div id="connectedTimeStatsStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding-top:8px;border-top:1px solid var(--border-subtle)"></div>
         </div>
       </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2>
-              <span>Top 5 Returning Listeners</span>
-              <span class="time-bound-badge alltime" title="Ranked across all completed & active sessions stored in SQLite">🏆 All-Time History</span>
-            </h2>
-            <div class="panel-subtitle">Most loyal repeat listeners across all recorded station history (bots excluded • filtered by min. avg connected time)</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <select id="returningSortByQuickSelect" class="select-control" title="Rank returning listeners by total listening time or session count" aria-label="Rank returning listeners">
-              <option value="total_time" selected>Sort: Total Time</option>
-              <option value="sessions">Sort: Sessions</option>
-            </select>
-            <select id="returningMinAvgQuickSelect" class="select-control" title="Minimum average session duration to qualify for Top 5 Returning Listeners" aria-label="Minimum average session duration">
-              <option value="0">Min Avg: Any (0s)</option>
-              <option value="30">Min Avg: 30 sec</option>
-              <option value="60" selected>Min Avg: 1 min (60s)</option>
-              <option value="120">Min Avg: 2 min</option>
-              <option value="300">Min Avg: 5 min</option>
-              <option value="600">Min Avg: 10 min</option>
-              <option value="900">Min Avg: 15 min</option>
-            </select>
-            <span id="returningTotalTag" class="mount-tag">SQLite Tracked</span>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div id="topReturningList" style="display:flex;flex-direction:column;gap:10px"></div>
-        </div>
       </div>
-    </section>
 
+      <!-- VIEW 5: Top & Flop (Detractor Songs) -->
+      <div class="nav-view" data-view="detractors">
     <!-- Row 2.75: Detractor Songs — Tune-Out & Drop-Off Analytics -->
     <section class="panel" id="detractorSongsPanel" aria-label="Detractor songs and tune-out leaderboard">
       <div class="panel-header">
@@ -534,6 +599,11 @@
       </div>
     </section>
 
+
+      </div>
+
+      <!-- VIEW 6: Players & User-Agents -->
+      <div class="nav-view" data-view="players">
     <!-- Row 3: RadioToolbox / StatCast User-Agent & Platform Telemetry -->
     <section class="row-tri" aria-label="User-Agent and device telemetry">
       <div class="panel">
@@ -582,6 +652,11 @@
       </div>
     </section>
 
+
+      </div>
+
+      <!-- VIEW 7: Bots & Probes -->
+      <div class="nav-view" data-view="bots">
     <!-- Dedicated Bot, Scraper & Probe Activity Card -->
     <section class="panel" id="botsPanel" aria-label="Detected bots and stream rippers panel">
       <div class="panel-header">
@@ -609,7 +684,101 @@
       </div>
     </section>
 
-  </main>
+
+      </div>
+    </main>
+
+    <!-- Right Persistent Live Data Sidebar (Statcast-style) -->
+    <aside class="live-sidebar" aria-label="Live station telemetry">
+      <div class="live-sidebar-header">
+        <span>Live Data</span>
+        <span class="live-pulse-dot" title="Live telemetry monitor"></span>
+      </div>
+
+      <!-- Listen / On Air Monitor Card -->
+      <div class="live-card live-listen-card">
+        <div class="live-card-label">
+          <span>LISTEN</span>
+          <span id="lastUpdatedClock" class="mono">--:--:--</span>
+        </div>
+        <div class="live-listen-controls">
+          <button id="toggleAudioBtn" class="play-stream-btn live-play-lg" title="Listen to live stream (https://live.ozone.fm:8443/listen)" aria-label="Toggle live audio stream">
+            <svg id="playIconSvg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="6 4 20 12 6 20 6 4"></polygon>
+            </svg>
+          </button>
+          <div id="vuMeterBars" class="vu-bars" aria-hidden="true">
+            <div class="vu-bar"></div>
+            <div class="vu-bar"></div>
+            <div class="vu-bar"></div>
+            <div class="vu-bar"></div>
+            <div class="vu-bar"></div>
+          </div>
+        </div>
+        <div id="nowPlayingTitle" class="live-track-title" title="Currently playing track">Connecting to stream metadata...</div>
+        <audio id="liveStreamAudio" preload="none" crossorigin="anonymous"></audio>
+      </div>
+
+      <!-- Live Listeners & Period Sessions Mini Cards -->
+      <div class="live-mini-grid">
+        <button type="button" class="live-mini-card" data-nav-jump="listeners" title="View live connected listeners">
+          <div class="live-mini-label">Listeners</div>
+          <div id="sidebarLiveListeners" class="live-mini-val mono">0</div>
+        </button>
+        <button type="button" class="live-mini-card" data-nav-jump="overview" title="Sessions in active period">
+          <div class="live-mini-label">Sessions</div>
+          <div id="sidebarPeriodSessions" class="live-mini-val mono">0</div>
+        </button>
+      </div>
+
+      <!-- Peak Card -->
+      <div class="live-card live-peak-card">
+        <div class="live-card-label">
+          <span>PEAK (24H)</span>
+        </div>
+        <div id="sidebarPeakListeners" class="live-peak-val mono">0</div>
+        <div id="sidebarPeakTime" class="live-peak-sub mono">--:--</div>
+      </div>
+
+      <!-- Server Data Card -->
+      <div class="live-card">
+        <div class="live-card-section-title">Server Data</div>
+        <div class="live-kv-list">
+          <div class="live-kv-row">
+            <span>Listeners</span>
+            <strong id="sidebarServerListeners" class="mono">0</strong>
+          </div>
+          <div class="live-kv-row">
+            <span>All-Time Peak</span>
+            <strong id="sidebarServerPeak" class="mono">0</strong>
+          </div>
+          <div class="live-kv-row">
+            <span>Mount</span>
+            <strong id="sidebarServerMount" class="mono">/listen</strong>
+          </div>
+          <div class="live-kv-row">
+            <span>Format</span>
+            <strong id="sidebarServerFormat" class="mono">320 kbps</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stream Health & Filters Card -->
+      <div class="live-card">
+        <div class="live-card-section-title">Stream Health</div>
+        <div class="live-kv-list">
+          <div class="live-kv-row">
+            <span>Bots / Probes</span>
+            <button type="button" class="live-link-btn mono" id="sidebarBotsCountBtn" data-nav-jump="bots">0 active</button>
+          </div>
+          <div class="live-kv-row">
+            <span>Placeholders</span>
+            <button type="button" class="live-link-btn" id="sidebarManageIgnoredBtn">Excluded list</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
 
   <!-- Modal 1: Icecast Server & Credentials Configuration -->
   <div id="settingsModalBackdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
@@ -796,7 +965,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=18"></script>
-  <script src="/app.js?v=18"></script>
+  <script src="/world-map.js?v=19"></script>
+  <script src="/app.js?v=19"></script>
 </body>
 </html>
