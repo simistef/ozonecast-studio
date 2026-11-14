@@ -2505,22 +2505,40 @@ button, input, select, textarea {
     grid-template-columns: 84px minmax(0, 1fr);
   }
   .side-nav {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     top: 0;
     height: 100vh;
   }
+  .workspace {
+    grid-column: 2;
+    grid-row: 1;
+  }
   .live-sidebar {
-    grid-column: 1 / -1;
+    grid-column: 2;
+    grid-row: 2;
     position: static;
     height: auto;
     border-left: none;
     border-top: 1px solid var(--border-subtle);
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    padding: 16px 20px 84px;
     align-items: stretch;
   }
   .live-sidebar-header {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1120px) {
+  .mobile-mini-player {
+    display: flex !important;
+    left: 96px;
+    right: 14px;
+    bottom: 12px;
   }
 }
 
