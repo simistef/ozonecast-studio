@@ -840,6 +840,61 @@
       navBotsBadge.textContent = activeBotsCount;
       navBotsBadge.classList.toggle('hidden', activeBotsCount <= 0);
     }
+
+    // Populate 2-Column Statcast-style Overview Cards
+    // 1. Peak Time Slot
+    const tod = dashboardState.timeOfDay;
+    const todProfile = tod?.profiles?.all || tod;
+    const hourly = todProfile?.hourly || [];
+    if (hourly.length > 0) {
+      const bestH = hourly.reduce((best, h) => ((h.avgListeners || 0) > (best.avgListeners || 0) ? h : best), hourly[0]);
+      const hStart = String(bestH.hour ?? 0).padStart(2, '0');
+      const hEnd = String(((bestH.hour ?? 0) + 2) % 24).padStart(2, '0');
+      setEl('ovSlotValue', `${hStart}:00 - ${hEnd}:59`);
+      setEl('ovSlotSub', `Avg ${(bestH.avgListeners || 0).toFixed(1)} listeners`);
+    }
+
+    // 2. Top Origin
+    const topCountry = (activeBreakdowns?.countries || [])[0];
+    const topCity = (activeBreakdowns?.cities || [])[0];
+    if (topCountry) {
+      setEl('ovOriginValue', topCity?.name && topCity.name !== 'Unknown' ? topCity.name : topCountry.name);
+      setEl('ovOriginCountry', topCountry.name || 'Top listener origin');
+      const totalC = (activeBreakdowns.countries || []).reduce((s, c) => s + (c.count || 0), 0) || 1;
+      const pct = Math.round(((topCountry.count || 0) / totalC) * 100);
+      setEl('ovOriginSub', `${pct}% of listeners`);
+    } else {
+      setEl('ovOriginValue', '--');
+      setEl('ovOriginCountry', 'Top listener origin');
+      setEl('ovOriginSub', '0% share');
+    }
+
+    // 3. Mobile vs Desktop
+    const cats = activeBreakdowns?.categories || [];
+    const totalCats = cats.reduce((s, c) => s + (c.count || 0), 0);
+    const mobileCount = cats.filter(c => /mobile|native/i.test(c.name)).reduce((s, c) => s + (c.count || 0), 0);
+    const desktopCount = cats.filter(c => /desktop|web/i.test(c.name)).reduce((s, c) => s + (c.count || 0), 0);
+    const mobilePct = totalCats > 0 ? ((mobileCount / totalCats) * 100).toFixed(1) : '0';
+    const desktopPct = totalCats > 0 ? ((desktopCount / totalCats) * 100).toFixed(1) : '0';
+    setEl('ovMobilePct', `${mobilePct}%`);
+    setEl('ovMobileSub', `${mobileCount} listener${mobileCount === 1 ? '' : 's'}`);
+    setEl('ovDesktopPct', `${desktopPct}%`);
+    setEl('ovDesktopSub', `${desktopCount} listener${desktopCount === 1 ? '' : 's'}`);
+
+    // 4. Bounce (< 60s short tune-ins)
+    const buckets = activeBreakdowns?.durationBuckets || [];
+    const totalBuckets = buckets.reduce((s, b) => s + (b.count || 0), 0);
+    const shortBucket = buckets.find(b => /<|60s|1m|short|0-/i.test(b.label || b.name || ''));
+    const bounceCount = shortBucket?.count || 0;
+    const bouncePct = totalBuckets > 0 ? ((bounceCount / totalBuckets) * 100).toFixed(1) : '0';
+    setEl('ovBouncePct', `${bouncePct}%`);
+    setEl('ovBounceSub', `${bounceCount} of ${totalBuckets} sessions`);
+
+    // 5. Bot sessions %
+    const totalWithBots = liveListeners + activeBotsCount;
+    const botPct = totalWithBots > 0 ? ((activeBotsCount / totalWithBots) * 100).toFixed(1) : '0';
+    setEl('ovBotPct', `${botPct}%`);
+    setEl('ovBotSub', `${activeBotsCount} active bot${activeBotsCount === 1 ? '' : 's'}`);
   }
 
   function renderTimeOfDayAndConnectedStats(timeOfDay, kpis) {

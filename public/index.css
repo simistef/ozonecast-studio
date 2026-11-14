@@ -883,23 +883,76 @@ button, input, select, textarea {
   color: var(--text-primary);
 }
 
-/* KPI Strip */
+/* KPI Strip (2-Column Statcast-style Overview Grid) */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
 }
 
 .kpi-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 16px 18px;
+  padding: 18px 20px;
   box-shadow: var(--shadow-surface);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 10px;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.kpi-card[data-nav-jump] {
+  cursor: pointer;
+}
+
+.kpi-card[data-nav-jump]:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.kpi-card-statcast {
+  align-items: center;
+  text-align: center;
+  padding: 20px 18px;
+  gap: 8px;
+}
+
+.kpi-statcast-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kpi-statcast-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-cyan);
+  margin: 2px 0;
+}
+
+.kpi-statcast-val {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  line-height: 1.2;
+}
+
+.kpi-statcast-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.kpi-statcast-delta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-emerald);
 }
 
 .kpi-header {

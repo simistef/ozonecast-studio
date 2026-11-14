@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=19" />
+  <link rel="stylesheet" href="/index.css?v=20" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -289,6 +289,87 @@
           <span id="kpiCard4FooterLeft">24h Unique IPs: <strong id="kpi24hUniqueIps" class="mono">0</strong></span>
           <span id="kpiCard4FooterRight">24h Sessions: <strong id="kpi24hSessions" class="mono">0</strong></span>
         </div>
+      </article>
+
+      <!-- Statcast-style 2-Column Overview Summary Cards -->
+      <article class="kpi-card kpi-card-statcast" data-nav-jump="schedule" title="Click to open Time Slots schedule">
+        <div class="kpi-statcast-title">Slot</div>
+        <div class="kpi-statcast-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"></circle>
+            <polyline points="12 7 12 12 15.5 14"></polyline>
+          </svg>
+        </div>
+        <div id="ovSlotValue" class="kpi-statcast-val">--:-- - --:--</div>
+        <div class="kpi-statcast-sub">Peak listening slot</div>
+        <div id="ovSlotSub" class="kpi-statcast-delta">7-day rolling profile</div>
+      </article>
+
+      <article class="kpi-card kpi-card-statcast" data-nav-jump="origin" title="Click to open Origin map &amp; country breakdown">
+        <div class="kpi-statcast-title">Origin</div>
+        <div class="kpi-statcast-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+        </div>
+        <div id="ovOriginValue" class="kpi-statcast-val">--</div>
+        <div id="ovOriginCountry" class="kpi-statcast-sub">Top listener origin</div>
+        <div id="ovOriginSub" class="kpi-statcast-delta">0% share</div>
+      </article>
+
+      <article class="kpi-card kpi-card-statcast" data-nav-jump="players" title="Click to open Players &amp; Devices breakdown">
+        <div class="kpi-statcast-title">Mobile</div>
+        <div class="kpi-statcast-icon">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="2" width="12" height="20" rx="2" ry="2"></rect>
+            <line x1="12" y1="18" x2="12.01" y2="18"></line>
+          </svg>
+        </div>
+        <div id="ovMobilePct" class="kpi-statcast-val">0%</div>
+        <div class="kpi-statcast-sub">Mobile devices</div>
+        <div id="ovMobileSub" class="kpi-statcast-delta">0 listeners</div>
+      </article>
+
+      <article class="kpi-card kpi-card-statcast" data-nav-jump="players" title="Click to open Players &amp; Devices breakdown">
+        <div class="kpi-statcast-title">Desktop</div>
+        <div class="kpi-statcast-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </div>
+        <div id="ovDesktopPct" class="kpi-statcast-val">0%</div>
+        <div class="kpi-statcast-sub">Desktop &amp; web</div>
+        <div id="ovDesktopSub" class="kpi-statcast-delta">0 listeners</div>
+      </article>
+
+      <article class="kpi-card kpi-card-statcast" data-nav-jump="detractors" title="Click to open Top &amp; Flop tune-out analytics">
+        <div class="kpi-statcast-title">Bounce</div>
+        <div class="kpi-statcast-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+        </div>
+        <div id="ovBouncePct" class="kpi-statcast-val">0%</div>
+        <div class="kpi-statcast-sub">Short tune-ins (&lt; 60s)</div>
+        <div id="ovBounceSub" class="kpi-statcast-delta">Drop-out rate</div>
+      </article>
+
+      <article class="kpi-card kpi-card-statcast" data-nav-jump="bots" title="Click to open Bots &amp; Probes panel">
+        <div class="kpi-statcast-title">Bot sessions</div>
+        <div class="kpi-statcast-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="8" width="16" height="12" rx="2"></rect>
+            <path d="M12 2v6"></path>
+            <circle cx="9" cy="14" r="1.5" fill="currentColor"></circle>
+            <circle cx="15" cy="14" r="1.5" fill="currentColor"></circle>
+          </svg>
+        </div>
+        <div id="ovBotPct" class="kpi-statcast-val">0%</div>
+        <div class="kpi-statcast-sub">Percentage</div>
+        <div id="ovBotSub" class="kpi-statcast-delta">0 active bots</div>
       </article>
     </section>
 
@@ -965,7 +1046,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=19"></script>
-  <script src="/app.js?v=19"></script>
+  <script src="/world-map.js?v=20"></script>
+  <script src="/app.js?v=20"></script>
 </body>
 </html>
