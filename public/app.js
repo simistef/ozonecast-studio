@@ -841,6 +841,11 @@
       navBotsBadge.classList.toggle('hidden', activeBotsCount <= 0);
     }
 
+    // Update browser tab title and dynamic favicon with active listener count
+    const stationName = stream?.serverName || 'OZONE.FM';
+    document.title = `(${liveListeners}) ${stationName} — OzoneCast Studio`;
+    updateDynamicFavicon(liveListeners);
+
     // Populate 2-Column Statcast-style Overview Cards
     // 1. Peak Time Slot
     const tod = dashboardState.timeOfDay;
@@ -897,6 +902,74 @@
     const botPct = totalWithBots > 0 ? ((activeBotsCount / totalWithBots) * 100).toFixed(1) : '0';
     setEl('ovBotPct', `${botPct}%`);
     setEl('ovBotSub', `${activeBotsCount} active bot${activeBotsCount === 1 ? '' : 's'}`);
+  }
+
+  let lastFaviconCount = null;
+  function updateDynamicFavicon(count) {
+    const safeCount = Math.max(0, Number(count) || 0);
+    if (lastFaviconCount === safeCount) return;
+    lastFaviconCount = safeCount;
+
+    const link = document.getElementById('appFavicon');
+    if (!link) return;
+
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+
+      // Rounded amber broadcast tile
+      ctx.fillStyle = '#f5821f';
+      ctx.beginPath();
+      ctx.roundRect(2, 2, 60, 60, 14);
+      ctx.fill();
+
+      // Broadcast arcs + center dot
+      ctx.strokeStyle = '#0b111c';
+      ctx.fillStyle = '#0b111c';
+      ctx.lineWidth = 4.5;
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      ctx.arc(24, 34, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      const drawArc = (r, start, end) => {
+        ctx.beginPath();
+        ctx.arc(24, 34, r, start, end);
+        ctx.stroke();
+      };
+      drawArc(12, Math.PI * 0.72, Math.PI * 1.28);
+      drawArc(12, -Math.PI * 0.28, Math.PI * 0.28);
+      drawArc(20, Math.PI * 0.75, Math.PI * 1.25);
+
+      // High-contrast listener count badge in bottom-right
+      const label = safeCount > 99 ? '99+' : String(safeCount);
+      ctx.font = 'bold 26px "JetBrains Mono", monospace';
+      const tw = ctx.measureText(label).width;
+      const pillW = Math.max(30, tw + 14);
+      const pillH = 30;
+      const px = 64 - pillW;
+      const py = 64 - pillH;
+
+      ctx.fillStyle = '#0b111c';
+      ctx.beginPath();
+      ctx.roundRect(px, py, pillW, pillH, 9);
+      ctx.fill();
+
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#10b981';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, px + pillW / 2, py + pillH / 2 + 1);
+
+      link.type = 'image/png';
+      link.href = canvas.toDataURL('image/png');
+    } catch (_) {}
   }
 
   function renderTimeOfDayAndConnectedStats(timeOfDay, kpis) {
