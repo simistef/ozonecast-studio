@@ -1389,6 +1389,7 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   font-size: 12.5px;
 }
 
@@ -1399,6 +1400,13 @@ button, input, select, textarea {
   font-weight: 500;
   color: var(--text-primary);
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dist-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dist-metrics {
@@ -1408,6 +1416,8 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .dist-bar-track {
@@ -3215,6 +3225,26 @@ button, input, select, textarea {
   /* Radar Chart */
   .radar-canvas-wrap {
     height: 330px !important;
+  }
+
+  /* Distribution Lists (Origin Countries/Cities, Players, OS) */
+  .dist-item-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+
+  .dist-label {
+    width: 100%;
+  }
+
+  .dist-metrics {
+    width: 100%;
+    justify-content: space-between;
+    font-size: 11px;
+    gap: 8px;
+    flex-wrap: wrap;
+    white-space: normal;
   }
 }
 
