@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=22" />
+  <link rel="stylesheet" href="/index.css?v=23" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -645,6 +645,36 @@
           <div id="connectedTimeStatsStrip" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding-top:8px;border-top:1px solid var(--border-subtle)"></div>
         </div>
       </div>
+
+      <!-- Weekly Spider Web (Radar) Visualization for Listeners & Sessions -->
+      <div class="panel" id="timeSlotsRadarPanel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>
+              <span>Weekly Spider Web — Listeners &amp; Sessions</span>
+              <span class="time-bound-badge time-7d">7-Day Radar</span>
+            </h2>
+            <div class="panel-subtitle">Day-of-week distribution comparing unique listeners vs. total sessions across Sunday–Saturday</div>
+          </div>
+          <div class="segmented-tabs" id="radarMetricTabs" role="tablist" aria-label="Spider web metric filter">
+            <button type="button" class="seg-btn active" data-radar-mode="both">Both</button>
+            <button type="button" class="seg-btn" data-radar-mode="listeners">Listeners</button>
+            <button type="button" class="seg-btn" data-radar-mode="sessions">Sessions</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="radar-layout">
+            <div class="radar-canvas-wrap">
+              <canvas id="timeSlotsRadarCanvas"></canvas>
+              <div id="radarTooltip" class="chart-tooltip hidden"></div>
+            </div>
+            <div class="radar-legend-row">
+              <span class="radar-legend-item"><span class="radar-dot listeners"></span> Unique Listeners</span>
+              <span class="radar-legend-item"><span class="radar-dot sessions"></span> Total Sessions</span>
+            </div>
+          </div>
+        </div>
+      </div>
       </div>
 
       <!-- VIEW 5: Top & Flop (Detractor Songs) -->
@@ -1046,7 +1076,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=22"></script>
-  <script src="/app.js?v=22"></script>
+  <script src="/world-map.js?v=23"></script>
+  <script src="/app.js?v=23"></script>
 </body>
 </html>

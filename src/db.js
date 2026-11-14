@@ -760,13 +760,17 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
 
   // Collect session duration stats per day
   const sessionDurations = {};
+  const sessionsByDay = {};
+  const uniqueIpsByDay = {};
   for (const k of profileKeys) {
     sessionDurations[k] = [];
+    sessionsByDay[k] = 0;
+    uniqueIpsByDay[k] = new Set();
   }
 
   try {
     let sessionQuery = `
-      SELECT last_seen, duration_seconds
+      SELECT ip, last_seen, duration_seconds
       FROM listener_sessions
       WHERE last_seen >= ?
     `;
@@ -794,13 +798,21 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
       const dayKey = DAY_KEYS[dayIdx];
 
       sessionDurations.all.push(dur);
+      sessionsByDay.all++;
+      if (s.ip) uniqueIpsByDay.all.add(s.ip);
       if (dayIdx >= 1 && dayIdx <= 5) {
         sessionDurations.weekdays.push(dur);
+        sessionsByDay.weekdays++;
+        if (s.ip) uniqueIpsByDay.weekdays.add(s.ip);
       } else {
         sessionDurations.weekend.push(dur);
+        sessionsByDay.weekend++;
+        if (s.ip) uniqueIpsByDay.weekend.add(s.ip);
       }
       if (sessionDurations[dayKey]) {
         sessionDurations[dayKey].push(dur);
+        sessionsByDay[dayKey]++;
+        if (s.ip) uniqueIpsByDay[dayKey].add(s.ip);
       }
     }
   } catch (err) {
@@ -900,6 +912,8 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
       bestHourAvg: p.bestHourAvg,
       bestDaypartName: p.bestDaypartName,
       samples: p.totalSamples,
+      sessions: sessionsByDay[d.key] || 0,
+      uniqueListeners: uniqueIpsByDay[d.key] ? uniqueIpsByDay[d.key].size : 0,
     };
   });
 

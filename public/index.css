@@ -2488,3 +2488,52 @@ button, input, select, textarea {
   }
 }
 
+/* Weekly Spider Web (Radar) Chart */
+.radar-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.radar-canvas-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  height: 360px;
+  margin: 0 auto;
+}
+
+.radar-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.radar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+}
+
+.radar-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.radar-dot.listeners {
+  background: hsl(199, 92%, 56%);
+  box-shadow: 0 0 6px hsla(199, 92%, 56%, 0.5);
+}
+
+.radar-dot.sessions {
+  background: hsl(28, 95%, 56%);
+  box-shadow: 0 0 6px hsla(28, 95%, 56%, 0.5);
+}
+
+

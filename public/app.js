@@ -1147,6 +1147,214 @@
         </div>
       `;
     }
+
+    // 8. Render Weekly Spider Web (Radar) Chart for Listeners & Sessions
+    renderTimeSlotsRadarChart(timeOfDay);
+  }
+
+  let radarMetricMode = 'both';
+
+  function renderTimeSlotsRadarChart(timeOfDay) {
+    const canvas = document.getElementById('timeSlotsRadarCanvas');
+    if (!canvas || !timeOfDay) return;
+
+    const days = Array.isArray(timeOfDay.daysOfWeek) ? timeOfDay.daysOfWeek : [];
+    const orderedKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const orderedDays = orderedKeys.map(k => days.find(d => d.key === k) || {
+      key: k,
+      name: k.charAt(0).toUpperCase() + k.slice(1),
+      uniqueListeners: 0,
+      sessions: 0,
+      avgListeners: 0,
+    });
+
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(280, Math.floor(rect.width || canvas.parentElement.clientWidth || 440));
+    const h = Math.max(260, Math.floor(rect.height || 360));
+
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    const gridColor = isLight ? 'rgba(15, 23, 42, 0.1)' : 'rgba(148, 163, 184, 0.14)';
+    const labelColor = isLight ? '#475569' : '#94a3b8';
+    const tickColor = isLight ? '#64748b' : '#94a3b8';
+    const tickBg = isLight ? 'rgba(255, 255, 255, 0.85)' : 'rgba(15, 23, 42, 0.85)';
+
+    const cx = w / 2;
+    const cy = h / 2 + 4;
+    const radius = Math.min(w, h) * 0.34;
+    const count = orderedDays.length; // 7
+    const rings = 5;
+
+    const listenersVals = orderedDays.map(d => Number(d.uniqueListeners || 0));
+    const sessionsVals = orderedDays.map(d => Number(d.sessions || 0));
+
+    let maxVal = 0;
+    if (radarMetricMode === 'listeners') {
+      maxVal = Math.max(0, ...listenersVals);
+    } else if (radarMetricMode === 'sessions') {
+      maxVal = Math.max(0, ...sessionsVals);
+    } else {
+      maxVal = Math.max(0, ...listenersVals, ...sessionsVals);
+    }
+    const scaleMax = maxVal > 0 ? Math.ceil(maxVal * 1.15) : 5;
+
+    const angleFor = idx => -Math.PI / 2 + (idx * 2 * Math.PI) / count;
+
+    // Draw concentric heptagon rings
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = gridColor;
+    for (let r = 1; r <= rings; r++) {
+      const rr = (radius * r) / rings;
+      ctx.beginPath();
+      for (let i = 0; i < count; i++) {
+        const a = angleFor(i);
+        const px = cx + Math.cos(a) * rr;
+        const py = cy + Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // Draw radial spokes & day labels
+    ctx.font = '600 12px Inter, sans-serif';
+    for (let i = 0; i < count; i++) {
+      const a = angleFor(i);
+      const ex = cx + Math.cos(a) * radius;
+      const ey = cy + Math.sin(a) * radius;
+
+      ctx.strokeStyle = gridColor;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      const lx = cx + Math.cos(a) * (radius + 22);
+      const ly = cy + Math.sin(a) * (radius + 18);
+      const cosA = Math.cos(a);
+      if (Math.abs(cosA) < 0.2) ctx.textAlign = 'center';
+      else if (cosA > 0) ctx.textAlign = 'left';
+      else ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = labelColor;
+      ctx.fillText(orderedDays[i].name, lx, ly);
+    }
+
+    // Scale tick labels along top Sunday axis
+    ctx.font = '500 10.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let r = 1; r <= rings; r++) {
+      const val = Math.round((scaleMax * r) / rings);
+      const ty = cy - (radius * r) / rings;
+      const txt = String(val);
+      const tw = ctx.measureText(txt).width + 6;
+      ctx.fillStyle = tickBg;
+      ctx.fillRect(cx - tw / 2, ty - 7, tw, 14);
+      ctx.fillStyle = tickColor;
+      ctx.fillText(txt, cx, ty);
+    }
+
+    const drawSeries = (vals, strokeColor, fillColor) => {
+      const pts = vals.map((v, i) => {
+        const ratio = Math.min(1, v / scaleMax);
+        const a = angleFor(i);
+        return {
+          x: cx + Math.cos(a) * (radius * ratio),
+          y: cy + Math.sin(a) * (radius * ratio),
+        };
+      });
+
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        if (idx === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = strokeColor;
+      ctx.stroke();
+
+      pts.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = strokeColor;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isLight ? '#ffffff' : '#0f172a';
+        ctx.stroke();
+      });
+    };
+
+    if (maxVal === 0) {
+      ctx.font = '500 13px Inter, sans-serif';
+      ctx.fillStyle = labelColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('No data available', cx, cy);
+    } else {
+      if (radarMetricMode === 'both' || radarMetricMode === 'sessions') {
+        drawSeries(sessionsVals, 'hsl(28, 95%, 56%)', 'hsla(28, 95%, 56%, 0.18)');
+      }
+      if (radarMetricMode === 'both' || radarMetricMode === 'listeners') {
+        drawSeries(listenersVals, 'hsl(199, 92%, 56%)', 'hsla(199, 92%, 56%, 0.22)');
+      }
+    }
+
+    // Hover tooltip interaction on nearest spoke vertex
+    if (!canvas._radarBound) {
+      canvas._radarBound = true;
+      canvas.addEventListener('mousemove', e => {
+        const tooltip = document.getElementById('radarTooltip');
+        if (!tooltip || !dashboardState?.timeOfDay) return;
+        const r = canvas.getBoundingClientRect();
+        const mx = e.clientX - r.left;
+        const my = e.clientY - r.top;
+        const curCx = r.width / 2;
+        const curCy = r.height / 2 + 4;
+        const dist = Math.hypot(mx - curCx, my - curCy);
+        const curRad = Math.min(r.width, r.height) * 0.34;
+
+        if (dist > curRad + 35) {
+          tooltip.classList.add('hidden');
+          return;
+        }
+
+        let ang = Math.atan2(my - curCy, mx - curCx) + Math.PI / 2;
+        if (ang < 0) ang += Math.PI * 2;
+        const sector = Math.round((ang / (Math.PI * 2)) * 7) % 7;
+        const curDays = (dashboardState.timeOfDay.daysOfWeek || []);
+        const key = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][sector];
+        const dayObj = curDays.find(d => d.key === key);
+        if (!dayObj) return;
+
+        tooltip.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px">${escapeHtml(dayObj.name)}</div>
+          <div class="mono" style="font-size:11.5px;color:hsl(199,92%,56%)">Unique Listeners: <strong>${dayObj.uniqueListeners || 0}</strong></div>
+          <div class="mono" style="font-size:11.5px;color:hsl(28,95%,56%)">Total Sessions: <strong>${dayObj.sessions || 0}</strong></div>
+          <div class="mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">Avg Concurrent: ${dayObj.avgListeners || 0}</div>
+        `;
+        tooltip.style.left = `${Math.min(r.width - 10, Math.max(10, mx))}px`;
+        tooltip.style.top = `${Math.max(40, my - 10)}px`;
+        tooltip.classList.remove('hidden');
+      });
+
+      canvas.addEventListener('mouseleave', () => {
+        document.getElementById('radarTooltip')?.classList.add('hidden');
+      });
+    }
   }
 
   function renderTopReturningListeners(topList, kpis) {
@@ -3679,6 +3887,18 @@
         console.error('Error adding ignored track:', err);
         showToast('Error excluding track', 'error');
       }
+    });
+
+    document.querySelectorAll('#radarMetricTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        radarMetricMode = btn.getAttribute('data-radar-mode') || 'both';
+        document.querySelectorAll('#radarMetricTabs .seg-btn').forEach(b => {
+          b.classList.toggle('active', b === btn);
+        });
+        if (dashboardState?.timeOfDay) {
+          renderTimeSlotsRadarChart(dashboardState.timeOfDay);
+        }
+      });
     });
 
     window.addEventListener('resize', () => {
