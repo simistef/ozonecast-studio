@@ -96,6 +96,16 @@
     return `${secs}s`;
   }
 
+  // Format duration without displaying seconds (e.g. "1h 24m", "24m", or "< 1m")
+  function formatDurationNoSeconds(seconds) {
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
+    const hrs = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    if (hrs > 0) return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+    if (mins > 0) return `${mins}m`;
+    return '< 1m';
+  }
+
   function formatRelativeTime(ts) {
     if (!ts) return '--';
     const diffSec = Math.max(0, Math.floor((Date.now() - Number(ts)) / 1000));
@@ -2527,7 +2537,7 @@
         let dupHtml = '';
         if (streamCount > 1) {
           const streamDetails = (r.streams || [r])
-            .map((s, idx) => `• Stream #${idx + 1}: ${formatDurationClock(s.liveConnectedSeconds)} (${s.liveConnectedSeconds}s) [Client #${s.clientId}]`)
+            .map((s, idx) => `• Stream #${idx + 1}: ${formatDurationNoSeconds(s.liveConnectedSeconds)} [Client #${s.clientId}]`)
             .join('&#10;');
           dupHtml = `<span class="dup-badge" title="${streamCount} simultaneous streams from this IP:&#10;${streamDetails}">${streamCount}x</span>`;
         }
@@ -2572,10 +2582,9 @@
               </div>
             </td>
             <td>
-              <span class="duration-pill ${durClass}" data-base-sec="${r.connectedSeconds}">
-                ${formatDurationClock(sec)}
+              <span class="duration-pill ${durClass}" data-base-sec="${r.connectedSeconds}" title="${sec}s connected (${formatDurationClock(sec)})">
+                ${formatDurationNoSeconds(sec)}
               </span>
-              <span class="mono" style="font-size:11px;color:var(--text-muted);margin-left:6px">(${sec}s)</span>
               ${extraStreamNote}
             </td>
             <td class="ua-cell">
@@ -2785,7 +2794,7 @@
       .join('');
   }
 
-  // Live 1-second duration ticker so Connected Time updates smoothly every second
+  // Live duration ticker so Connected Time updates smoothly as minutes progress without seconds
   setInterval(() => {
     if (!dashboardState) return;
     const elapsed = getLiveElapsedSec();
@@ -2793,9 +2802,13 @@
     pills.forEach(pill => {
       const base = parseInt(pill.getAttribute('data-base-sec') || '0', 10);
       const total = base + elapsed;
-      pill.textContent = formatDurationClock(total);
-      const nextSpan = pill.nextElementSibling;
-      if (nextSpan) nextSpan.textContent = `(${total}s)`;
+      pill.textContent = formatDurationNoSeconds(total);
+      pill.title = `${total}s connected (${formatDurationClock(total)})`;
+      const durClass = total >= 3600 ? 'long' : total >= 900 ? 'medium' : '';
+      if (!pill.classList.contains(durClass)) {
+        pill.classList.remove('long', 'medium');
+        if (durClass) pill.classList.add(durClass);
+      }
     });
   }, 1000);
 
