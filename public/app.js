@@ -858,10 +858,12 @@
     const topCountry = (activeBreakdowns?.countries || [])[0];
     const topCity = (activeBreakdowns?.cities || [])[0];
     if (topCountry) {
-      setEl('ovOriginValue', topCity?.name && topCity.name !== 'Unknown' ? topCity.name : topCountry.name);
-      setEl('ovOriginCountry', topCountry.name || 'Top listener origin');
+      const cityDisplay = topCity?.hasCity && topCity?.city ? topCity.city : '';
+      const countryDisplay = topCountry.countryName || topCountry.name || 'Unknown';
+      setEl('ovOriginValue', cityDisplay || countryDisplay);
+      setEl('ovOriginCountry', cityDisplay ? countryDisplay : 'Top listener country');
       const totalC = (activeBreakdowns.countries || []).reduce((s, c) => s + (c.count || 0), 0) || 1;
-      const pct = Math.round(((topCountry.count || 0) / totalC) * 100);
+      const pct = topCountry.sharePct ?? Math.round(((topCountry.count || 0) / totalC) * 100);
       setEl('ovOriginSub', `${pct}% of listeners`);
     } else {
       setEl('ovOriginValue', '--');
