@@ -250,22 +250,25 @@
       }
     }
 
-    // 5. Marathon Listening Badges
+    // 5. Marathon Listening Badges (strictly above station average & >= 2h)
+    const stationAvgSec = Number(dashboardState?.kpis?.avgSessionDurationSec) || 600;
     const effectiveLiveSec = Math.max(liveConnectedSeconds, listener.connectedSeconds || 0);
-    if (effectiveLiveSec >= 7200 || longestSession >= 10800) {
-      const hrs = (effectiveLiveSec / 3600).toFixed(1);
+    const marathonSec = Math.max(effectiveLiveSec, longestSession);
+    const marathonThreshold = Math.max(7200, stationAvgSec * 3);
+    if (marathonSec >= marathonThreshold) {
+      const hrs = (marathonSec / 3600).toFixed(1);
       badges.push({
         id: 'marathon',
         type: 'marathon',
         label: `⚡ Marathon (${hrs}h)`,
         shortLabel: `⚡ Marathon`,
         className: 'badge-marathon',
-        tooltip: `Marathon listening session • Active for ${formatDurationHuman(effectiveLiveSec)} in a single session`
+        tooltip: `Marathon listener • ${formatDurationHuman(marathonSec)} session (well above station avg of ${formatDurationHuman(stationAvgSec)})`
       });
     }
 
-    // 6. Superfan Badge (cumulative > 24 hours, if not #1 top)
-    if (totalDuration >= 86400 && allTimeRank !== 1) {
+    // 6. Superfan Badge (cumulative > 24 hours and well above average, if not #1 top)
+    if (totalDuration >= Math.max(86400, stationAvgSec * 20) && allTimeRank !== 1) {
       const totHrs = (totalDuration / 3600).toFixed(0);
       badges.push({
         id: 'superfan',
@@ -283,10 +286,6 @@
   function renderListenerBadgesHtml(badges, maxBadges = 3) {
     if (!badges || badges.length === 0) return '';
     const visible = badges.slice(0, maxBadges);
-    const extraCount = badges.length - visible.length;
-    const extraBadge = extraCount > 0
-      ? `<span class="listener-badge badge-top" style="opacity:0.85;font-size:10px;padding:1px 5px" title="${escapeHtml(badges.slice(maxBadges).map(b => b.label).join(', '))}">+${extraCount} more</span>`
-      : '';
 
     return `
       <div class="listener-badges-row">
@@ -295,7 +294,6 @@
             ${escapeHtml(b.label)}
           </span>
         `).join('')}
-        ${extraBadge}
       </div>
     `;
   }
@@ -2887,7 +2885,7 @@
             <span style="font-size:11.5px;color:var(--accent-amber);font-weight:600">${sum.all_time_rank ? `🌟 Rank #${sum.all_time_rank} Station-Wide` : 'Station Visitor'}</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            ${renderListenerBadgesHtml(dossierBadges, 10)}
+            ${renderListenerBadgesHtml(dossierBadges, 3)}
           </div>
         </div>
 
