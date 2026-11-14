@@ -2114,10 +2114,11 @@ button, input, select, textarea {
     justify-content: space-between;
   }
   .workspace {
-    padding: 14px 16px 36px;
+    padding: 12px 14px 40px;
   }
   .kpi-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
   .form-grid-2 {
     grid-template-columns: 1fr;
@@ -2452,39 +2453,15 @@ button, input, select, textarea {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
   .side-nav {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    height: auto;
-    flex-direction: row;
-    overflow-x: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 6px 10px;
-    gap: 6px;
+    display: none !important;
   }
-  .side-nav-item {
-    flex: 0 0 auto;
-    flex-direction: row;
-    padding: 8px 12px;
-    gap: 6px;
-  }
-  .side-nav-item.active::before {
-    left: 10px;
-    right: 10px;
-    top: auto;
-    bottom: -6px;
-    width: auto;
-    height: 3px;
-    border-radius: 3px 3px 0 0;
-  }
-  .side-nav-badge {
-    position: static;
+  .live-sidebar {
+    display: none !important;
   }
 }
 
@@ -2534,6 +2511,700 @@ button, input, select, textarea {
 .radar-dot.sessions {
   background: hsl(28, 95%, 56%);
   box-shadow: 0 0 6px hsla(28, 95%, 56%, 0.5);
+}
+
+/* ==============================================================================
+   iPhone Duo & Mobile-Optimized Broadcast Architecture
+   ============================================================================== */
+
+/* Desktop defaults: mobile elements hidden */
+.mobile-bottom-nav,
+.mobile-mini-player,
+.mobile-live-pill,
+.mobile-sheet-backdrop {
+  display: none;
+}
+
+/* Mobile Live Listener Pill in Header */
+.mobile-live-pill {
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: hsla(158, 85%, 44%, 0.15);
+  border: 1px solid hsla(158, 85%, 44%, 0.35);
+  color: var(--accent-emerald);
+  margin-left: 6px;
+}
+
+/* Floating Mini-Player Bar */
+.mobile-mini-player {
+  position: fixed;
+  bottom: calc(58px + max(8px, env(safe-area-inset-bottom)));
+  left: 10px;
+  right: 10px;
+  z-index: 85;
+  background: hsla(214, 28%, 11%, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
+}
+
+.mobile-mini-player:active {
+  transform: scale(0.99);
+}
+
+.mobile-play-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(135deg, hsl(28, 95%, 52%), hsl(18, 90%, 46%));
+  color: #0b111c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px hsla(28, 95%, 52%, 0.35);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.mobile-play-btn:active {
+  transform: scale(0.92);
+}
+
+.mobile-play-btn.playing {
+  background: linear-gradient(135deg, hsl(158, 85%, 44%), hsl(158, 85%, 36%));
+  color: #052e16;
+  box-shadow: 0 0 12px hsla(158, 85%, 44%, 0.4);
+}
+
+.mobile-player-meta {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobile-player-topline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+}
+
+.mobile-onair-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--accent-amber);
+  text-transform: uppercase;
+}
+
+.pulse-dot-mini {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  animation: pulse-ring 2s infinite ease-out;
+}
+
+.mobile-player-mount {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.mobile-player-listeners {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-emerald);
+}
+
+.mobile-player-marquee-wrap {
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+}
+
+.mobile-player-track {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.mobile-vu-meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 18px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.mobile-vu-meter .vu-bar {
+  width: 3px;
+  height: 4px;
+  border-radius: 1.5px;
+  background: var(--accent-amber);
+  opacity: 0.4;
+  transition: height 0.12s ease, opacity 0.15s ease;
+}
+
+.mobile-vu-meter.active .vu-bar {
+  opacity: 1;
+  background: var(--accent-emerald);
+}
+
+/* Mobile Bottom Navigation Bar */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  background: hsla(214, 28%, 9%, 0.94);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--border-subtle);
+  height: calc(54px + max(4px, env(safe-area-inset-bottom)));
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+  align-items: center;
+  justify-content: space-around;
+  user-select: none;
+}
+
+.mobile-tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.12s ease;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab-item:active {
+  transform: scale(0.92);
+}
+
+.mobile-tab-item.active {
+  color: var(--accent-amber);
+}
+
+.mobile-tab-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+}
+
+.mobile-tab-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.mobile-tab-badge {
+  position: absolute;
+  top: -3px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent-amber);
+  color: hsl(214, 28%, 8%);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 8px hsla(28, 95%, 52%, 0.4);
+}
+
+.mobile-tab-badge.dot {
+  min-width: 7px;
+  width: 7px;
+  height: 7px;
+  top: 0;
+  right: -2px;
+  padding: 0;
+}
+
+/* Slide-Up "More" Bottom Sheet */
+.mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-sheet-backdrop.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mobile-sheet {
+  background: hsla(214, 28%, 10%, 0.98);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid var(--border-strong);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 16px calc(24px + max(12px, env(safe-area-inset-bottom)));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 85vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+  transform: translateY(0);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-sheet-backdrop.hidden .mobile-sheet {
+  transform: translateY(100%);
+}
+
+.mobile-sheet-handle-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 6px;
+}
+
+.mobile-sheet-handle {
+  width: 38px;
+  height: 4.5px;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.mobile-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mobile-sheet-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.mobile-sheet-close {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mobile-sheet-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  min-height: 52px;
+}
+
+.mobile-sheet-item:active {
+  background: var(--bg-hover);
+  transform: scale(0.98);
+}
+
+.mobile-sheet-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mobile-sheet-item-icon.amber {
+  background: hsla(28, 95%, 52%, 0.14);
+  color: var(--accent-amber);
+}
+
+.mobile-sheet-item-icon.blue {
+  background: hsla(199, 92%, 56%, 0.14);
+  color: var(--accent-cyan);
+}
+
+.mobile-sheet-item-icon.purple {
+  background: hsla(271, 91%, 65%, 0.14);
+  color: hsl(271, 91%, 70%);
+}
+
+.mobile-sheet-item-icon.emerald {
+  background: hsla(158, 85%, 44%, 0.14);
+  color: var(--accent-emerald);
+}
+
+.mobile-sheet-item-icon.slate {
+  background: hsla(214, 20%, 60%, 0.14);
+  color: var(--text-secondary);
+}
+
+.mobile-sheet-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-sheet-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-sheet-item-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* ==============================================================================
+   Mobile Viewport Rules (iPhone standard / Plus / Pro Max / SE)
+   ============================================================================== */
+@media (max-width: 768px) {
+  .mobile-bottom-nav,
+  .mobile-mini-player,
+  .mobile-live-pill {
+    display: flex !important;
+  }
+
+  .mobile-sheet-backdrop:not(.hidden) {
+    display: flex !important;
+  }
+
+  /* Safe-Area Padding for iPhone Notch & Dynamic Island */
+  .topbar {
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+
+  .topbar-main {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .brand-titles h1 {
+    font-size: 13.5px;
+    gap: 6px;
+  }
+
+  .station-emblem {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  /* Compact Topbar Actions on Mobile */
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  #pollIntervalSelect,
+  #openImportModalBtn {
+    display: none !important;
+  }
+
+  #manualRefreshBtn span,
+  #openSettingsModalBtn span {
+    display: none !important;
+  }
+
+  #manualRefreshBtn,
+  #openSettingsModalBtn {
+    padding: 7px 9px;
+    min-height: 36px;
+  }
+
+  .theme-btn .theme-label {
+    display: none;
+  }
+
+  .theme-btn {
+    padding: 5px 7px;
+  }
+
+  /* Subbar Compact Horizontal Pill Strip */
+  .topbar-subbar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .topbar-scope-label,
+  #breakdownActiveScopeBadge {
+    display: none !important;
+  }
+
+  .topbar-scope-cluster {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .topbar-scope-cluster::-webkit-scrollbar {
+    display: none;
+  }
+
+  .segmented-tabs {
+    flex-shrink: 0;
+    gap: 3px;
+  }
+
+  .seg-btn {
+    padding: 5px 9px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  /* Workspace Safe Clearance above bottom tab bar and mini-player */
+  .workspace {
+    padding: 10px 12px calc(130px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .view-header {
+    margin-bottom: 12px;
+  }
+
+  .view-title {
+    font-size: 18px;
+  }
+
+  .view-subtitle {
+    font-size: 12px;
+  }
+
+  /* 2-Column Overview KPI Cards on iPhone */
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .kpi-card {
+    padding: 12px 10px !important;
+    gap: 6px;
+  }
+
+  .kpi-number {
+    font-size: 20px !important;
+  }
+
+  .kpi-statcast-title {
+    font-size: 11.5px;
+  }
+
+  .kpi-statcast-val {
+    font-size: 18px !important;
+  }
+
+  .kpi-statcast-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .kpi-statcast-sub {
+    font-size: 10px !important;
+  }
+
+  .kpi-statcast-delta {
+    font-size: 9.5px !important;
+  }
+
+  /* Clients Table Touch Polish */
+  .table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .search-input-wrap {
+    min-width: 100% !important;
+  }
+
+  .table-scroll {
+    border-radius: var(--radius-sm);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .clients-table {
+    min-width: 620px;
+  }
+
+  /* Map Viewport */
+  [data-view="origin"] .map-viewport {
+    height: 320px !important;
+  }
+
+  /* Radar Chart */
+  .radar-canvas-wrap {
+    height: 290px !important;
+  }
+}
+
+/* ==============================================================================
+   iPhone Duo & Dual-Screen Spanning / Landscape Split View
+   ============================================================================== */
+@media (horizontal-viewport-segments: 2),
+       (screen-spanning: single-fold-vertical),
+       (orientation: landscape) and (max-height: 520px) {
+  .app-shell {
+    grid-template-columns: 320px minmax(0, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  /* Left Screen / Pane: Stream Monitor & Telemetry Hub */
+  .live-sidebar {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-column: 1 !important;
+    position: sticky !important;
+    top: 60px !important;
+    max-height: calc(100vh - 66px) !important;
+    overflow-y: auto !important;
+    border-right: 1px solid var(--border-subtle) !important;
+    border-left: none !important;
+    border-top: none !important;
+    padding: 10px !important;
+  }
+
+  /* Right Screen / Pane: Workspace Content */
+  .workspace {
+    grid-column: 2 !important;
+    max-height: calc(100vh - 66px) !important;
+    overflow-y: auto !important;
+    padding: 10px 14px 60px !important;
+  }
+
+  /* Hide mini player in duo landscape mode (full player is on left pane) */
+  .mobile-mini-player {
+    display: none !important;
+  }
+
+  /* Compact bottom nav in landscape */
+  .mobile-bottom-nav {
+    height: calc(44px + max(2px, env(safe-area-inset-bottom))) !important;
+    padding-bottom: max(2px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-tab-item {
+    padding: 3px 0 !important;
+  }
+
+  .mobile-tab-icon-wrap {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .topbar {
+    padding-left: max(16px, env(safe-area-inset-left)) !important;
+    padding-right: max(16px, env(safe-area-inset-right)) !important;
+  }
+}
+
+/* ==============================================================================
+   White / Day Theme Mobile Overrides
+   ============================================================================== */
+[data-theme="light"] .mobile-bottom-nav {
+  background: hsla(214, 20%, 98%, 0.94);
+  border-top-color: hsl(214, 20%, 88%);
+}
+
+[data-theme="light"] .mobile-tab-item {
+  color: hsl(215, 16%, 45%);
+}
+
+[data-theme="light"] .mobile-tab-item.active {
+  color: hsl(28, 92%, 42%);
+}
+
+[data-theme="light"] .mobile-mini-player {
+  background: hsla(210, 24%, 99%, 0.96);
+  border-color: hsl(214, 20%, 85%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="light"] .mobile-sheet {
+  background: hsla(210, 24%, 99%, 0.98);
+  border-top-color: hsl(214, 20%, 85%);
+  box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.15);
+}
+
+[data-theme="light"] .mobile-sheet-item {
+  background: #ffffff;
+  border-color: hsl(214, 20%, 88%);
+}
+
+[data-theme="light"] .mobile-sheet-item:active {
+  background: hsl(214, 20%, 94%);
 }
 
 

@@ -690,7 +690,29 @@
     document.getElementById('endpointHostDisplay').textContent = hostShort;
     const formatLabel = (stream.contentType || 'audio/aacp').includes('aac') ? 'AAC+' : 'MP3';
     document.getElementById('streamFormatSpec').textContent = `${stream.bitrate || 320} kbps ${formatLabel}`;
-    document.getElementById('nowPlayingTitle').textContent = stream.title || 'OZONE.FM Live Stream';
+    const liveStreamTitle = stream.title || 'OZONE.FM Live Stream';
+    document.getElementById('nowPlayingTitle').textContent = liveStreamTitle;
+    const mobileTrack = document.getElementById('mobileNowPlayingTitle');
+    if (mobileTrack) mobileTrack.textContent = liveStreamTitle;
+    const mobileMount = document.getElementById('mobilePlayerMount');
+    if (mobileMount) mobileMount.textContent = connection.mount || '/listen';
+    const mobileListeners = document.getElementById('mobilePlayerListeners');
+    if (mobileListeners) mobileListeners.textContent = `${kpis?.currentListeners || 0} live`;
+    const mobileHeaderCount = document.getElementById('mobileHeaderLiveCount');
+    if (mobileHeaderCount) mobileHeaderCount.textContent = kpis?.currentListeners || 0;
+    const mobileTabBadge = document.getElementById('mobileNavListenersBadge');
+    if (mobileTabBadge) mobileTabBadge.textContent = kpis?.currentListeners || 0;
+
+    const totalBots = dashboardState.bots?.totalSessions || 0;
+    const mobileBotsBadge = document.getElementById('mobileSheetBotsBadge');
+    if (mobileBotsBadge) {
+      mobileBotsBadge.textContent = totalBots;
+      mobileBotsBadge.classList.toggle('hidden', totalBots === 0);
+    }
+    const mobileMoreBadge = document.getElementById('mobileNavMoreBadge');
+    if (mobileMoreBadge) {
+      mobileMoreBadge.classList.toggle('hidden', totalBots === 0);
+    }
     document.getElementById('lastUpdatedClock').textContent = new Date(dashboardState.timestamp).toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
@@ -3742,35 +3764,56 @@
       downloadBlob(JSON.stringify(dashboardState, null, 2), `ozone-fm-telemetry-${Date.now()}.json`, 'application/json');
     });
 
-    // Audio Stream Preview Player
+    // Audio Stream Preview Player (Unified Desktop Sidebar + Mobile Mini-Player)
     const audioEl = document.getElementById('liveStreamAudio');
     const playBtn = document.getElementById('toggleAudioBtn');
+    const mobilePlayBtn = document.getElementById('mobilePlayBtn');
     const playSvg = document.getElementById('playIconSvg');
-    const vuBars = document.getElementById('vuMeterBars');
+    const mobilePlaySvg = document.getElementById('mobilePlayIconSvg');
 
-    playBtn?.addEventListener('click', async () => {
+    function syncPlayState(isPlaying) {
+      const pauseIcon = `<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>`;
+      const playIcon = `<polygon points="6 4 20 12 6 20 6 4"></polygon>`;
+      if (isPlaying) {
+        playBtn?.classList.add('playing');
+        mobilePlayBtn?.classList.add('playing');
+        if (playSvg) playSvg.innerHTML = pauseIcon;
+        if (mobilePlaySvg) mobilePlaySvg.innerHTML = pauseIcon;
+        startVuAnimation();
+      } else {
+        playBtn?.classList.remove('playing');
+        mobilePlayBtn?.classList.remove('playing');
+        if (playSvg) playSvg.innerHTML = playIcon;
+        if (mobilePlaySvg) mobilePlaySvg.innerHTML = playIcon;
+        stopVuAnimation();
+      }
+    }
+
+    async function toggleAudioStream() {
       if (!audioEl) return;
       if (audioEl.paused) {
         const streamUrl = dashboardState?.stream?.listenUrl || 'https://live.ozone.fm:8443/listen';
         audioEl.src = streamUrl;
         try {
           await audioEl.play();
-          playBtn.classList.add('playing');
-          playSvg.innerHTML = `<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>`;
-          startVuAnimation(vuBars);
+          syncPlayState(true);
           showToast(`Playing live stream: ${streamUrl}`);
         } catch (err) {
-          // If sandbox blocks direct browser audio stream, animate monitor or notify user
           showToast(`Stream monitor notice: Direct browser connection to ${streamUrl} requires network access to port 8443.`);
         }
       } else {
         audioEl.pause();
         audioEl.src = '';
-        playBtn.classList.remove('playing');
-        playSvg.innerHTML = `<polygon points="6 4 20 12 6 20 6 4"></polygon>`;
-        stopVuAnimation(vuBars);
+        syncPlayState(false);
       }
-    });
+    }
+
+    playBtn?.addEventListener('click', toggleAudioStream);
+    mobilePlayBtn?.addEventListener('click', toggleAudioStream);
+
+    audioEl?.addEventListener('pause', () => syncPlayState(false));
+    audioEl?.addEventListener('ended', () => syncPlayState(false));
+    audioEl?.addEventListener('error', () => syncPlayState(false));
 
     // Settings Modal
     const settingsBackdrop = document.getElementById('settingsModalBackdrop');
@@ -4014,10 +4057,21 @@
   function setActiveNavView(viewKey) {
     const key = VIEW_META[viewKey] ? viewKey : 'overview';
 
+    // Desktop sidebar rail items
     document.querySelectorAll('#sideNav .side-nav-item').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-nav') === key);
     });
 
+    // Mobile bottom navigation items
+    document.querySelectorAll('#mobileBottomNav .mobile-tab-item').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-nav') === key);
+    });
+
+    // If active view is a secondary view (Top & Flop, Players, Bots), highlight "More" tab
+    const moreViews = ['detractors', 'players', 'bots'];
+    document.getElementById('mobileMoreTabBtn')?.classList.toggle('active', moreViews.includes(key));
+
+    // Nav workspace views
     document.querySelectorAll('.nav-view').forEach(view => {
       view.classList.toggle('active', view.getAttribute('data-view') === key);
     });
@@ -4035,6 +4089,11 @@
       history.replaceState(null, '', `#${key}`);
     }
 
+    // On mobile screens, smoothly scroll to top when changing views
+    if (window.innerWidth <= 768) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     // Re-render size-dependent canvases/charts after view becomes visible
     if (dashboardState) {
       requestAnimationFrame(() => {
@@ -4042,18 +4101,76 @@
           renderHistoryChart(dashboardState.history, dashboardState.trackChanges);
         } else if (key === 'schedule') {
           renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, dashboardState.kpis);
+        } else if (key === 'origin') {
+          if (window.worldMapInstance?.resize) {
+            window.worldMapInstance.resize();
+          }
         }
       });
     }
   }
 
   function setupNavigation() {
+    // Desktop Nav Items
     document.querySelectorAll('#sideNav .side-nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
         setActiveNavView(btn.getAttribute('data-nav'));
       });
     });
 
+    // Mobile Bottom Nav Items
+    document.querySelectorAll('#mobileBottomNav .mobile-tab-item[data-nav]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setActiveNavView(btn.getAttribute('data-nav'));
+      });
+    });
+
+    // Mobile "More" Bottom Sheet Controls
+    const moreBackdrop = document.getElementById('mobileMoreBackdrop');
+    const moreBtn = document.getElementById('mobileMoreTabBtn');
+    const closeSheetBtn = document.getElementById('closeMobileSheetBtn');
+
+    function openMobileMoreSheet() {
+      moreBackdrop?.classList.remove('hidden');
+      moreBtn?.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMobileMoreSheet() {
+      moreBackdrop?.classList.add('hidden');
+      moreBtn?.setAttribute('aria-expanded', 'false');
+    }
+
+    moreBtn?.addEventListener('click', openMobileMoreSheet);
+    closeSheetBtn?.addEventListener('click', closeMobileMoreSheet);
+    moreBackdrop?.addEventListener('click', e => {
+      if (e.target === moreBackdrop) closeMobileMoreSheet();
+    });
+
+    // More Sheet Navigation Items
+    document.querySelectorAll('#mobileMoreSheet [data-nav]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        closeMobileMoreSheet();
+        setActiveNavView(btn.getAttribute('data-nav'));
+      });
+    });
+
+    // More Sheet Settings & Import Actions
+    document.getElementById('mobileSheetSettingsBtn')?.addEventListener('click', () => {
+      closeMobileMoreSheet();
+      document.getElementById('openSettingsModalBtn')?.click();
+    });
+
+    document.getElementById('mobileSheetImportBtn')?.addEventListener('click', () => {
+      closeMobileMoreSheet();
+      document.getElementById('openImportModalBtn')?.click();
+    });
+
+    // Mobile Mini-Player Track Tap to Overview
+    document.getElementById('mobilePlayerMeta')?.addEventListener('click', () => {
+      setActiveNavView('overview');
+    });
+
+    // In-Page Navigation Jumps
     document.querySelectorAll('[data-nav-jump]').forEach(btn => {
       btn.addEventListener('click', () => {
         setActiveNavView(btn.getAttribute('data-nav-jump'));
@@ -4077,24 +4194,24 @@
     setActiveNavView(VIEW_META[hashInit] ? hashInit : savedView);
   }
 
-  function startVuAnimation(container) {
-    if (!container) return;
-    container.classList.add('active');
-    const bars = container.querySelectorAll('.vu-bar');
+  function startVuAnimation() {
+    const containers = document.querySelectorAll('#vuMeterBars, #mobileVuMeterBars');
+    containers.forEach(c => c.classList.add('active'));
     if (vuAnimationTimer) clearInterval(vuAnimationTimer);
     vuAnimationTimer = setInterval(() => {
-      bars.forEach(b => {
+      document.querySelectorAll('#vuMeterBars .vu-bar, #mobileVuMeterBars .vu-bar').forEach(b => {
         const h = Math.floor(4 + Math.random() * 14);
         b.style.height = `${h}px`;
       });
     }, 130);
   }
 
-  function stopVuAnimation(container) {
+  function stopVuAnimation() {
     if (vuAnimationTimer) clearInterval(vuAnimationTimer);
-    if (!container) return;
-    container.classList.remove('active');
-    container.querySelectorAll('.vu-bar').forEach(b => {
+    document.querySelectorAll('#vuMeterBars, #mobileVuMeterBars').forEach(c => {
+      c.classList.remove('active');
+    });
+    document.querySelectorAll('#vuMeterBars .vu-bar, #mobileVuMeterBars .vu-bar').forEach(b => {
       b.style.height = '4px';
     });
   }
