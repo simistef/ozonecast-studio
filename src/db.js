@@ -2332,6 +2332,148 @@ function getBotActivity(rangeMinutes = 1440, sourceMode = null) {
   };
 }
 
+/**
+ * Computes audience retention and new listener lifecycle statistics:
+ * - Exploring (1 session, < 5 min duration)
+ * - Attracted (1 session, >= 5 min duration)
+ * - Returning (>= 2 sessions - attracted back!)
+ * - One-Off (completed single session that has not returned)
+ */
+function getNewListenerRetentionSummary(rangeMinutes = 1440, sourceMode = null) {
+  const now = Date.now();
+  const since = rangeMinutes > 0 ? now - rangeMinutes * 60 * 1000 : 0;
+  const aliases = getIpAliasesMap();
+
+  try {
+    const rows = db.prepare(`
+      SELECT
+        ip,
+        COUNT(*) as session_count,
+        SUM(duration_seconds) as total_duration_seconds,
+        MAX(duration_seconds) as longest_session_seconds,
+        MIN(first_seen) as first_seen,
+        MAX(last_seen) as last_seen,
+        MAX(is_active) as is_active,
+        MAX(city) as city,
+        MAX(country_code) as country_code,
+        MAX(country_name) as country_name,
+        MAX(player) as player,
+        MAX(os) as os,
+        MAX(category) as category
+      FROM listener_sessions
+      WHERE (last_seen >= ? OR ? = 0)
+        AND (? IS NULL OR source_mode = ?)
+        AND ip NOT IN (${ADMIN_IP_SUBQUERY})
+        AND category != 'Bot / Ripper'
+        AND ip NOT IN (SELECT ip FROM bot_ips)
+        AND LOWER(user_agent) NOT LIKE '%bot%'
+        AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+        AND LOWER(user_agent) NOT LIKE '%crawler%'
+        AND LOWER(user_agent) NOT LIKE '%spider%'
+        AND LOWER(user_agent) NOT LIKE '%streamripper%'
+      GROUP BY ip
+      ORDER BY last_seen DESC
+    `).all(since, since, sourceMode, sourceMode);
+
+    let exploringCount = 0;
+    let attractedCount = 0;
+    let returningCount = 0;
+    let oneOffCount = 0;
+    let activeCount = 0;
+
+    const listeners = rows.map(r => {
+      const sessionCount = Number(r.session_count) || 1;
+      const totalDurationSec = Number(r.total_duration_seconds) || 0;
+      const longestSessionSec = Number(r.longest_session_seconds) || 0;
+      const isActive = Number(r.is_active) === 1;
+      if (isActive) activeCount++;
+
+      let status = 'exploring';
+      let statusLabel = '🔍 Exploring';
+      let statusClass = 'badge-exploring';
+      let statusTooltip = 'New listener sampling the station (< 5m connected)';
+
+      if (sessionCount >= 2) {
+        status = 'returning';
+        statusLabel = `🔁 Returning (${sessionCount}x)`;
+        statusClass = 'badge-returning';
+        statusTooltip = `Attracted back to station • Tuned in for ${sessionCount} distinct sessions`;
+        returningCount++;
+      } else {
+        // 1 session
+        if (totalDurationSec >= 300 || longestSessionSec >= 300) {
+          status = 'attracted';
+          statusLabel = '🎯 Attracted';
+          statusClass = 'badge-attracted';
+          statusTooltip = 'New listener attracted to station • Extended listening on first visit (≥ 5m)';
+          attractedCount++;
+        } else {
+          status = 'exploring';
+          statusLabel = '🔍 Exploring';
+          statusClass = 'badge-exploring';
+          statusTooltip = 'New listener exploring / sampling the stream (< 5m duration)';
+          exploringCount++;
+        }
+        if (!isActive) {
+          oneOffCount++;
+        }
+      }
+
+      return {
+        ip: r.ip,
+        friendlyName: aliases[r.ip]?.friendlyName || '',
+        notes: aliases[r.ip]?.notes || '',
+        status,
+        statusLabel,
+        statusClass,
+        statusTooltip,
+        sessionCount,
+        totalDurationSeconds: totalDurationSec,
+        longestSessionSeconds: longestSessionSec,
+        firstSeen: Number(r.first_seen) || 0,
+        lastSeen: Number(r.last_seen) || 0,
+        isActive,
+        city: r.city || '',
+        countryCode: r.country_code || 'UN',
+        countryName: r.country_name || 'Unknown',
+        player: r.player || 'Audio Client',
+        os: r.os || 'Unknown',
+        category: r.category || 'Client',
+      };
+    });
+
+    const totalUnique = listeners.length;
+    const newTotal = exploringCount + attractedCount;
+    const attractionRate = newTotal > 0 ? Math.round((attractedCount / newTotal) * 100) : 0;
+    const returnRate = totalUnique > 0 ? Math.round((returningCount / totalUnique) * 100) : 0;
+
+    return {
+      totalUnique,
+      exploringCount,
+      attractedCount,
+      returningCount,
+      oneOffCount,
+      activeCount,
+      attractionRate,
+      returnRate,
+      recentListeners: listeners.slice(0, 20),
+    };
+  } catch (err) {
+    console.error('Error computing new listener retention summary:', err);
+    return {
+      totalUnique: 0,
+      exploringCount: 0,
+      attractedCount: 0,
+      returningCount: 0,
+      oneOffCount: 0,
+      activeCount: 0,
+      attractionRate: 0,
+      returnRate: 0,
+      recentListeners: [],
+    };
+  }
+}
+
 module.exports = {
   db,
   getConfig,
@@ -2342,6 +2484,7 @@ module.exports = {
   getHistoricalBreakdowns,
   getTimeOfDayProfile,
   getTopReturningListeners,
+  getNewListenerRetentionSummary,
   getListenersHistoricalSummary,
   getAggregatedStats,
   getIpHistory,

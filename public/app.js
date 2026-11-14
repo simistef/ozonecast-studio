@@ -156,7 +156,7 @@
     const isMe = lowerName === 'me' || lowerName.startsWith('me ') || lowerName === 'admin' || lowerName.startsWith('admin ');
     const isBot = Boolean(listener.isBot || listener.isManualBot || listener.ua?.isRipper || listener.ua?.category === 'Bot / Ripper');
 
-    // 1. Station Admin ("Me")
+    // 1. Station Admin ("Me") - Station operator, excluded from audience statistics
     if (isMe) {
       badges.push({
         id: 'admin',
@@ -164,8 +164,9 @@
         label: '👑 Station Admin',
         shortLabel: '👑 Admin',
         className: 'badge-admin',
-        tooltip: 'Station Admin IP ("Me") • Excluded from detractor statistics'
+        tooltip: 'Station Admin ("Me") • Excluded from audience retention statistics'
       });
+      return badges; // Never attach listener/loyalty badges to station admin
     }
 
     // 2. Bot / Stream Ripper
@@ -229,7 +230,9 @@
       }
     }
 
-    // 4. Frequency & Return Badges
+    // 4. Frequency & Audience Retention Lifecycle Badges
+    const effectiveSec = Math.max(liveConnectedSeconds, listener.connectedSeconds || 0);
+
     if (sessionCount >= 5) {
       badges.push({
         id: 'frequent',
@@ -246,20 +249,29 @@
         label: `🔁 Returning (${sessionCount} visits)`,
         shortLabel: `🔁 Returning (${sessionCount}x)`,
         className: 'badge-returning',
-        tooltip: `Returning listener • Has tuned in ${sessionCount} times`
+        tooltip: `Returning listener attracted back to station • ${sessionCount} distinct sessions recorded`
       });
     } else {
-      // 1 session: check if new
-      const now = Date.now();
-      const isFirstVisit = !firstSeen || (now - firstSeen) < 48 * 3600 * 1000;
-      if (isFirstVisit) {
+      // 1 session: evaluate whether Exploring (< 5m) or Attracted (>= 5m)
+      if (effectiveSec >= 300) {
         badges.push({
-          id: 'new',
-          type: 'new',
-          label: '✨ New Listener',
-          shortLabel: '✨ New',
-          className: 'badge-new',
-          tooltip: 'First-time listener • First seen on OzoneCast recently'
+          id: 'attracted',
+          type: 'attracted',
+          group: 'new',
+          label: `🎯 Attracted (${formatDurationNoSeconds(effectiveSec)})`,
+          shortLabel: '🎯 Attracted',
+          className: 'badge-attracted',
+          tooltip: `New listener attracted to station • Tuned in for ${formatDurationHuman(effectiveSec)} continuous listening on first visit`
+        });
+      } else {
+        badges.push({
+          id: 'exploring',
+          type: 'exploring',
+          group: 'new',
+          label: '🔍 Exploring',
+          shortLabel: '🔍 Exploring',
+          className: 'badge-exploring',
+          tooltip: `New listener exploring / sampling the station • Tuned in for ${formatDurationHuman(effectiveSec)} (< 5m connected)`
         });
       }
     }
@@ -812,6 +824,9 @@
     // 4.5. Time-of-Day Profile, Connected Time Stats & Top 5 Returning Listeners
     renderTimeOfDayAndConnectedStats(dashboardState.timeOfDay, kpis);
     renderTopReturningListeners(dashboardState.topReturningListeners, kpis);
+    if (dashboardState.listenerRetention) {
+      renderListenerRetention(dashboardState.listenerRetention);
+    }
 
     // 4.75. Detractor Songs (Tune-Outs & Drop-Off Analytics)
     renderDetractorSongs(activeBreakdowns.detractorSongs || dashboardState.detractorSongs, activeBreakdowns.detractorSummary || dashboardState.detractorSummary);
@@ -1757,6 +1772,90 @@
       canvas.addEventListener('touchend', () => {
         setTimeout(() => document.getElementById('radarTimeTooltip')?.classList.add('hidden'), 2500);
       });
+    }
+  }
+
+  let currentRetentionScope = 'past_24h';
+
+  function renderListenerRetention(retention) {
+    if (!retention) return;
+
+    const exploringVal = document.getElementById('retentionExploringVal');
+    const exploringSub = document.getElementById('retentionExploringSub');
+    const attractedVal = document.getElementById('retentionAttractedVal');
+    const attractedSub = document.getElementById('retentionAttractedSub');
+    const returningVal = document.getElementById('retentionReturningVal');
+    const returningSub = document.getElementById('retentionReturningSub');
+    const oneOffVal = document.getElementById('retentionOneOffVal');
+    const oneOffSub = document.getElementById('retentionOneOffSub');
+    const totalBadge = document.getElementById('retentionTotalListenersBadge');
+    const attractionPill = document.getElementById('retentionAttractionRatePill');
+    const returnPill = document.getElementById('retentionReturnRatePill');
+    const funnelSummary = document.getElementById('retentionFunnelSummary');
+    const barExploring = document.getElementById('retentionBarExploring');
+    const barAttracted = document.getElementById('retentionBarAttracted');
+    const barReturning = document.getElementById('retentionBarReturning');
+    const listEl = document.getElementById('retentionListenersList');
+
+    const total = retention.totalUnique || 0;
+    const exploring = retention.exploringCount || 0;
+    const attracted = retention.attractedCount || 0;
+    const returning = retention.returningCount || 0;
+    const oneOff = retention.oneOffCount || 0;
+    const newTotal = exploring + attracted;
+
+    if (totalBadge) totalBadge.textContent = `${total} Listeners`;
+    if (exploringVal) exploringVal.textContent = exploring;
+    if (exploringSub) exploringSub.textContent = newTotal > 0 ? `${Math.round((exploring / newTotal) * 100)}% of new listeners` : 'Sampled stream';
+    if (attractedVal) attractedVal.textContent = attracted;
+    if (attractedSub) attractedSub.textContent = newTotal > 0 ? `${Math.round((attracted / newTotal) * 100)}% of new listeners` : 'Engaged on 1st visit';
+    if (returningVal) returningVal.textContent = returning;
+    if (returningSub) returningSub.textContent = total > 0 ? `${Math.round((returning / total) * 100)}% return rate` : 'Attracted back (2+ visits)';
+    if (oneOffVal) oneOffVal.textContent = oneOff;
+    if (oneOffSub) oneOffSub.textContent = `${oneOff} single-session bounces`;
+
+    if (attractionPill) attractionPill.textContent = `Attraction Rate: ${retention.attractionRate ?? 0}%`;
+    if (returnPill) returnPill.textContent = `Return Rate: ${retention.returnRate ?? 0}%`;
+    if (funnelSummary) funnelSummary.textContent = `${total} unique listeners (${retention.activeCount || 0} active now)`;
+
+    const exploringPct = total > 0 ? (exploring / total) * 100 : 0;
+    const attractedPct = total > 0 ? (attracted / total) * 100 : 0;
+    const returningPct = total > 0 ? (returning / total) * 100 : 0;
+
+    if (barExploring) barExploring.style.width = `${exploringPct}%`;
+    if (barAttracted) barAttracted.style.width = `${attractedPct}%`;
+    if (barReturning) barReturning.style.width = `${returningPct}%`;
+
+    if (listEl) {
+      const recent = retention.recentListeners || [];
+      if (recent.length === 0) {
+        listEl.innerHTML = `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px">No listener retention activity recorded for this period.</div>`;
+      } else {
+        listEl.innerHTML = recent.map(l => {
+          const flag = isoToFlagEmoji(l.countryCode);
+          const loc = l.city ? `${escapeHtml(l.city)}, ${escapeHtml(l.countryName || l.countryCode)}` : escapeHtml(l.countryName || l.countryCode);
+          const activeDot = l.isActive ? '<span class="status-dot online" style="width:7px;height:7px;display:inline-block;border-radius:50%;background:var(--accent-emerald);margin-right:4px" title="Active live stream connection"></span>' : '';
+          const namePart = l.friendlyName ? `<span style="font-weight:600;color:var(--text-primary)">${escapeHtml(l.friendlyName)}</span> <span class="mono" style="font-size:11px;color:var(--text-muted)">(${escapeHtml(l.ip)})</span>` : `<span class="mono" style="font-weight:600">${escapeHtml(l.ip)}</span>`;
+
+          return `
+            <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:8px">
+                ${activeDot}
+                <button type="button" class="btn-dossier" data-ip="${escapeHtml(l.ip)}" style="background:none;border:none;padding:0;cursor:pointer;color:inherit;text-align:left">
+                  ${namePart}
+                </button>
+                <span class="listener-badge ${escapeHtml(l.statusClass)}" title="${escapeHtml(l.statusTooltip || '')}">${escapeHtml(l.statusLabel)}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;font-size:11.5px">
+                <span style="color:var(--text-secondary)">${flag} ${loc}</span>
+                <span class="mono" style="color:var(--accent-amber)">${formatDurationNoSeconds(l.totalDurationSeconds || 0)}</span>
+                <span class="mono" style="color:var(--text-muted)">${escapeHtml(l.player || 'Audio Client')}</span>
+                <span style="color:var(--text-muted);font-size:11px">${formatRelativeTime(l.lastSeen)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
     }
   }
 
@@ -2710,7 +2809,7 @@
     }
 
     if (tableBadgeFilter !== 'ALL') {
-      rows = rows.filter(r => r.badges.some(b => b.type === tableBadgeFilter || b.id === tableBadgeFilter));
+      rows = rows.filter(r => r.badges.some(b => b.type === tableBadgeFilter || b.id === tableBadgeFilter || (tableBadgeFilter === 'new' && b.group === 'new')));
     }
 
     if (q) {
@@ -4338,6 +4437,42 @@
           renderListeningTimeRadarChart(dashboardState.timeOfDay);
         }
       });
+    });
+
+    document.querySelectorAll('#retentionScopeTabs .seg-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const scope = btn.getAttribute('data-retention-scope') || 'past_24h';
+        currentRetentionScope = scope;
+        document.querySelectorAll('#retentionScopeTabs .seg-btn').forEach(b => {
+          b.classList.toggle('active', b === btn);
+        });
+        const badge = document.getElementById('retentionScopeBadge');
+        if (badge) {
+          const names = { past_24h: 'Past 24h', past_7d: 'Past 7d', all_time: 'All-Time' };
+          badge.textContent = names[scope] || 'Past 24h';
+          badge.className = `time-bound-badge ${scope === 'all_time' ? 'alltime' : (scope === 'past_7d' ? 'time-7d' : 'time-24h')}`;
+        }
+        const rangeMap = { past_24h: 1440, past_7d: 10080, all_time: 0 };
+        try {
+          const res = await fetch(`/api/listeners/retention?range=${rangeMap[scope] ?? 1440}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.retention) {
+              renderListenerRetention(data.retention);
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching listener retention:', err);
+        }
+      });
+    });
+
+    document.getElementById('retentionListenersList')?.addEventListener('click', e => {
+      const btn = e.target.closest('.btn-dossier');
+      if (btn) {
+        const ip = btn.getAttribute('data-ip');
+        if (ip) openIpInspector(ip);
+      }
     });
 
     window.addEventListener('resize', () => {

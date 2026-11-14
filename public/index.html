@@ -483,7 +483,9 @@
             <option value="top">🌟 Top Listeners</option>
             <option value="frequent">🔄 Frequent Listeners</option>
             <option value="returning">🔁 Returning Listeners</option>
-            <option value="new">✨ New Listeners</option>
+            <option value="attracted">🎯 Attracted (New ≥ 5m)</option>
+            <option value="exploring">🔍 Exploring (New &lt; 5m)</option>
+            <option value="new">✨ All New Listeners</option>
             <option value="marathon">⚡ Marathon Listeners</option>
             <option value="admin">👑 Station Admin ("Me")</option>
           </select>
@@ -526,6 +528,79 @@
       </div>
     </section>
 
+      <!-- Audience Retention & New Listener Lifecycle Monitor -->
+      <section class="panel" id="listenerRetentionPanel" aria-label="New listener retention and conversion telemetry">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>
+              <span>New Listener Retention &amp; Conversion Monitor</span>
+              <span id="retentionScopeBadge" class="time-bound-badge time-24h">Past 24h</span>
+              <span id="retentionTotalListenersBadge" class="mount-tag">0 Listeners</span>
+            </h2>
+            <div class="panel-subtitle">
+              Distinguish whether new listeners are <strong>Exploring (&lt; 5m)</strong>, <strong>Attracted (≥ 5m)</strong>, <strong>Returning (attracted back 2+ visits)</strong>, or <strong>One-Off bounces</strong>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="segmented-tabs" id="retentionScopeTabs" role="tablist" aria-label="Retention monitoring scope">
+              <button type="button" class="seg-btn active" data-retention-scope="past_24h">Past 24h</button>
+              <button type="button" class="seg-btn" data-retention-scope="past_7d">Past 7d</button>
+              <button type="button" class="seg-btn" data-retention-scope="all_time">All-Time</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:14px">
+          <!-- 4 Lifecycle KPI Cards -->
+          <div id="retentionKpiGrid" class="kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+            <div class="kpi-card">
+              <div class="kpi-label">🔍 EXPLORING (NEW &lt; 5M)</div>
+              <div class="kpi-val mono" id="retentionExploringVal" style="color:hsl(199,92%,56%)">0</div>
+              <div class="kpi-sub" id="retentionExploringSub">Briefly sampled stream</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">🎯 ATTRACTED (NEW ≥ 5M)</div>
+              <div class="kpi-val mono" id="retentionAttractedVal" style="color:hsl(158,85%,48%)">0</div>
+              <div class="kpi-sub" id="retentionAttractedSub">Engaged on 1st visit</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">🔁 RETURNING (RETAINED)</div>
+              <div class="kpi-val mono" id="retentionReturningVal" style="color:hsl(268,88%,65%)">0</div>
+              <div class="kpi-sub" id="retentionReturningSub">Attracted back (2+ visits)</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">🍂 ONE-OFF (BOUNCED)</div>
+              <div class="kpi-val mono" id="retentionOneOffVal" style="color:var(--text-secondary)">0</div>
+              <div class="kpi-sub" id="retentionOneOffSub">Single visit, not returned</div>
+            </div>
+          </div>
+
+          <!-- Retention Health Banner / Pipeline Progress Bar -->
+          <div class="retention-funnel-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+              <div style="font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px">
+                <span>Audience Conversion Pipeline</span>
+                <span id="retentionAttractionRatePill" class="mount-tag" style="background:hsla(158,85%,45%,0.15);color:hsl(158,90%,70%);border-color:hsla(158,85%,45%,0.35);font-size:11px">Attraction Rate: 0%</span>
+                <span id="retentionReturnRatePill" class="mount-tag" style="background:hsla(268,88%,65%,0.15);color:hsl(268,90%,80%);border-color:hsla(268,88%,65%,0.35);font-size:11px">Return Rate: 0%</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted)" id="retentionFunnelSummary">0 total human listeners tracked</div>
+            </div>
+            <div class="retention-bar-wrap" style="height:12px;background:var(--bg-elevated);border-radius:6px;overflow:hidden;display:flex">
+              <div id="retentionBarExploring" style="width:0%;background:hsl(199,92%,56%);transition:width 0.3s" title="Exploring (< 5m)"></div>
+              <div id="retentionBarAttracted" style="width:0%;background:hsl(158,85%,48%);transition:width 0.3s" title="Attracted (≥ 5m)"></div>
+              <div id="retentionBarReturning" style="width:0%;background:hsl(268,88%,65%);transition:width 0.3s" title="Returning (2+ visits)"></div>
+            </div>
+          </div>
+
+          <!-- Recent New & Retained Listeners Telemetry Feed -->
+          <div>
+            <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-secondary);display:flex;align-items:center;justify-content:space-between">
+              <span>Recent Listener Retention Activity</span>
+              <span style="font-size:11px;color:var(--text-muted)">Station Admin ("Me") &amp; Bots excluded</span>
+            </div>
+            <div id="retentionListenersList" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+        </div>
+      </section>
 
       <div class="panel">
         <div class="panel-header">

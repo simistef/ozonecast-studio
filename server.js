@@ -13,6 +13,7 @@ const {
   getHistoricalBreakdowns,
   getTimeOfDayProfile,
   getTopReturningListeners,
+  getNewListenerRetentionSummary,
   getListenersHistoricalSummary,
   getAggregatedStats,
   getIpHistory,
@@ -669,6 +670,7 @@ app.get('/api/dashboard', async (req, res) => {
       detractorSummary: breakdowns24h.detractorSummary || getDetractorSummary(1440, modeForHistory, true),
       timeOfDay,
       topReturningListeners,
+      listenerRetention: getNewListenerRetentionSummary(1440, modeForHistory),
       history,
       trackChanges,
       recentEvents: stats24h.recentEvents,
@@ -721,6 +723,19 @@ app.get('/api/time-of-day', (req, res) => {
   const mode = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
   const profile = getTimeOfDayProfile(mode, true, day);
   res.json({ ok: true, excludeBots: true, activeDay: day, profile });
+});
+
+// API: New Listener Retention & Conversion Breakdown
+app.get('/api/listeners/retention', (req, res) => {
+  try {
+    const range = Math.max(0, parseInt(req.query.range, 10) || 1440);
+    const mode = req.query.mode || latestState.activeSourceMode || 'live';
+    const retention = getNewListenerRetentionSummary(range, mode);
+    res.json({ ok: true, rangeMinutes: range, retention });
+  } catch (err) {
+    console.error('Error fetching listener retention:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // API: Force immediate poll

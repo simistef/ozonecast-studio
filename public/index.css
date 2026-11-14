@@ -1695,6 +1695,24 @@ button, input, select, textarea {
   border: 1px solid hsla(270, 80%, 65%, 0.42);
 }
 
+.listener-badge.badge-attracted {
+  background: hsla(158, 85%, 45%, 0.18);
+  color: hsl(158, 92%, 78%);
+  border: 1px solid hsla(158, 85%, 45%, 0.42);
+}
+
+.listener-badge.badge-exploring {
+  background: hsla(199, 92%, 56%, 0.18);
+  color: hsl(199, 95%, 82%);
+  border: 1px solid hsla(199, 92%, 56%, 0.42);
+}
+
+.listener-badge.badge-oneoff {
+  background: hsla(215, 20%, 65%, 0.15);
+  color: hsl(215, 20%, 75%);
+  border: 1px solid hsla(215, 20%, 65%, 0.35);
+}
+
 /* 3. Marathon / Superfan */
 .listener-badge.badge-marathon {
   background: hsla(28, 95%, 56%, 0.16);
@@ -1749,6 +1767,21 @@ button, input, select, textarea {
   color: hsl(270, 80%, 36%);
   border-color: hsla(270, 75%, 55%, 0.32);
 }
+[data-theme="light"] .listener-badge.badge-attracted {
+  background: hsla(158, 85%, 35%, 0.12);
+  color: hsl(158, 90%, 25%);
+  border-color: hsla(158, 85%, 35%, 0.32);
+}
+[data-theme="light"] .listener-badge.badge-exploring {
+  background: hsla(199, 92%, 45%, 0.12);
+  color: hsl(199, 95%, 28%);
+  border-color: hsla(199, 92%, 45%, 0.32);
+}
+[data-theme="light"] .listener-badge.badge-oneoff {
+  background: hsla(215, 20%, 50%, 0.12);
+  color: hsl(215, 20%, 30%);
+  border-color: hsla(215, 20%, 50%, 0.32);
+}
 [data-theme="light"] .listener-badge.badge-marathon {
   background: hsla(25, 95%, 45%, 0.12);
   color: hsl(25, 95%, 30%);
@@ -1768,6 +1801,25 @@ button, input, select, textarea {
   background: hsla(355, 84%, 55%, 0.12);
   color: hsl(355, 85%, 38%);
   border-color: hsla(355, 84%, 55%, 0.32);
+}
+
+/* Audience Retention & Lifecycle Funnel Card */
+.retention-funnel-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+@media (max-width: 768px) {
+  #retentionKpiGrid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 480px) {
+  #retentionKpiGrid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* Activity Audit Log */
