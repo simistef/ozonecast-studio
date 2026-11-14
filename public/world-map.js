@@ -374,8 +374,8 @@
 
     // 4. Listener Pins & Smart Non-Overlapping City Callout Pills
     let pinsHtml = '';
-    const clusterList = Array.from(clusters.values());
-    const placedLabels = [];
+    const clusterList = Array.from(clusters.values()).sort((a, b) => b.clients.length - a.clients.length);
+    const placedBoxes = [];
 
     clusterList.forEach((cluster, idx) => {
       const { x, y } = latLonToXY(cluster.lat, cluster.lon, viewMode);
@@ -416,8 +416,8 @@
       const isHumanOnly = humanCount > 0 && botCount === 0;
       const isMixed = botCount > 0 && humanCount > 0;
 
-      const baseRadius = Math.min(10.5, 6.2 + Math.sqrt(count) * 1.5) * pinScale;
-      const pulseRadius = baseRadius * 2.3;
+      const baseRadius = Math.min(9.5, 5.2 + Math.sqrt(count) * 1.3) * pinScale;
+      const pulseRadius = baseRadius * 2.15;
 
       // Pulse and core styling classes
       const pulseClass = isBotOnly
@@ -484,34 +484,56 @@
 
       const fullLabel = flagEmoji + ' ' + labelTitle + iconBadge + (count > 1 && !isMixed ? ' (' + count + ')' : '');
 
-      // Smart offset so nearby cities (e.g. Ploiești and Mrenești in Romania) do not overlap
-      let offsetY = -10 * pinScale;
-      let anchor = 'middle';
-      let offsetX = 0;
-      for (const prev of placedLabels) {
-        if (Math.abs(x - prev.x) < 55 * pinScale && Math.abs(y + offsetY - (prev.y + prev.offsetY)) < 14 * pinScale) {
-          offsetY = prev.offsetY < 0 ? 14 * pinScale : -12 * pinScale;
-          if (x < prev.x) {
-            anchor = 'end';
-            offsetX = -6 * pinScale;
-          } else {
-            anchor = 'start';
-            offsetX = 6 * pinScale;
-          }
+      // Smart 8-position bounding-box placement so nearby city labels never overlap
+      const estWidth = Math.max(36, fullLabel.length * 5.2 * pinScale);
+      const estHeight = 12 * pinScale;
+      const candidates = [
+        { ox: 0, oy: -10 * pinScale, anchor: 'middle' },
+        { ox: 0, oy: 15 * pinScale, anchor: 'middle' },
+        { ox: 8 * pinScale, oy: 3 * pinScale, anchor: 'start' },
+        { ox: -8 * pinScale, oy: 3 * pinScale, anchor: 'end' },
+        { ox: 7 * pinScale, oy: -9 * pinScale, anchor: 'start' },
+        { ox: -7 * pinScale, oy: -9 * pinScale, anchor: 'end' },
+        { ox: 7 * pinScale, oy: 14 * pinScale, anchor: 'start' },
+        { ox: -7 * pinScale, oy: 14 * pinScale, anchor: 'end' },
+      ];
+
+      let chosen = null;
+      for (const cand of candidates) {
+        const cx = x + cand.ox;
+        const cy = y + cand.oy;
+        let left = cx - estWidth / 2;
+        if (cand.anchor === 'start') left = cx;
+        else if (cand.anchor === 'end') left = cx - estWidth;
+        const box = {
+          left: left - 2,
+          right: left + estWidth + 2,
+          top: cy - estHeight,
+          bottom: cy + 2,
+        };
+        const overlaps = placedBoxes.some(
+          b => !(box.right < b.left || box.left > b.right || box.bottom < b.top || box.top > b.bottom)
+        );
+        if (!overlaps) {
+          chosen = { ...cand, box };
+          break;
         }
       }
-      placedLabels.push({ x, y, offsetY });
 
-      const showCallout = isEuroProj || clusterList.length <= 14;
-      const calloutFontSize = (9.5 * pinScale).toFixed(1);
+      if (chosen) {
+        placedBoxes.push(chosen.box);
+      }
+
+      const showCallout = Boolean(chosen) && (isEuroProj || clusterList.length <= 16);
+      const calloutFontSize = (9.2 * pinScale).toFixed(1);
       const calloutStroke = (3.0 * pinScale).toFixed(1);
       const calloutHtml = showCallout
         ? '<text x="' +
-          offsetX.toFixed(1) +
+          chosen.ox.toFixed(1) +
           '" y="' +
-          offsetY.toFixed(1) +
+          chosen.oy.toFixed(1) +
           '" text-anchor="' +
-          anchor +
+          chosen.anchor +
           '" style="font-family:Inter,sans-serif;font-size:' +
           calloutFontSize +
           'px;font-weight:600;fill:#f8fafc;paint-order:stroke;stroke:hsl(222,28%,8%);stroke-width:' +

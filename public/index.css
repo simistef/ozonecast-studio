@@ -1225,13 +1225,30 @@ button, input, select, textarea {
   left: 12px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
-  background: hsla(214, 24%, 8%, 0.84);
-  padding: 4px 10px;
-  border-radius: 4px;
+  background: hsla(214, 24%, 8%, 0.88);
+  padding: 5px 12px;
+  border-radius: 6px;
   border: 1px solid var(--border-subtle);
   font-size: 11px;
   color: var(--text-secondary);
+  max-width: calc(100% - 24px);
+}
+
+/* Origin View: Single-column full-width layout for easy map & breakdown reading */
+[data-view="origin"] .row-split {
+  grid-template-columns: 1fr;
+}
+
+[data-view="origin"] .map-viewport {
+  height: 460px;
+}
+
+@media (max-width: 760px) {
+  [data-view="origin"] .map-viewport {
+    height: 320px;
+  }
 }
 
 /* Historical Trend Chart & Time of Day Profile */
