@@ -705,6 +705,15 @@
     }
   }
 
+  let htmlDecodeEl = null;
+  function decodeHtmlEntities(str) {
+    if (!str || typeof str !== 'string') return str || '';
+    if (!str.includes('&')) return str;
+    if (!htmlDecodeEl) htmlDecodeEl = document.createElement('textarea');
+    htmlDecodeEl.innerHTML = str;
+    return htmlDecodeEl.value;
+  }
+
   function renderAll() {
     if (!dashboardState) return;
     const { connection, stream, kpis, listeners, breakdowns, history, recentEvents } = dashboardState;
@@ -716,7 +725,7 @@
     document.getElementById('endpointHostDisplay').textContent = hostShort;
     const formatLabel = (stream.contentType || 'audio/aacp').includes('aac') ? 'AAC+' : 'MP3';
     document.getElementById('streamFormatSpec').textContent = `${stream.bitrate || 320} kbps ${formatLabel}`;
-    const liveStreamTitle = stream.title || 'OZONE.FM Live Stream';
+    const liveStreamTitle = decodeHtmlEntities(stream.title || 'OZONE.FM Live Stream');
     document.getElementById('nowPlayingTitle').textContent = liveStreamTitle;
     const mobileTrack = document.getElementById('mobileNowPlayingTitle');
     if (mobileTrack) mobileTrack.textContent = liveStreamTitle;
@@ -724,6 +733,12 @@
     if (mobileMount) mobileMount.textContent = connection.mount || '/listen';
     const mobileListeners = document.getElementById('mobilePlayerListeners');
     if (mobileListeners) mobileListeners.textContent = `${kpis?.currentListeners || 0} live`;
+    const topbarTrack = document.getElementById('topbarNowPlayingTitle');
+    if (topbarTrack) topbarTrack.textContent = liveStreamTitle;
+    const topbarMount = document.getElementById('topbarPlayerMount');
+    if (topbarMount) topbarMount.textContent = connection.mount || '/listen';
+    const topbarListeners = document.getElementById('topbarPlayerListeners');
+    if (topbarListeners) topbarListeners.textContent = `${kpis?.currentListeners || 0} live`;
     const mobileHeaderCount = document.getElementById('mobileHeaderLiveCount');
     if (mobileHeaderCount) mobileHeaderCount.textContent = kpis?.currentListeners || 0;
     const mobileTabBadge = document.getElementById('mobileNavListenersBadge');
@@ -4176,12 +4191,14 @@
       downloadBlob(JSON.stringify(dashboardState, null, 2), `ozone-fm-telemetry-${Date.now()}.json`, 'application/json');
     });
 
-    // Audio Stream Preview Player (Unified Desktop Sidebar + Mobile Mini-Player)
+    // Audio Stream Preview Player (Unified Desktop Sidebar + Topbar + Mobile Mini-Player)
     const audioEl = document.getElementById('liveStreamAudio');
     const playBtn = document.getElementById('toggleAudioBtn');
     const mobilePlayBtn = document.getElementById('mobilePlayBtn');
+    const topbarPlayBtn = document.getElementById('topbarPlayBtn');
     const playSvg = document.getElementById('playIconSvg');
     const mobilePlaySvg = document.getElementById('mobilePlayIconSvg');
+    const topbarPlaySvg = document.getElementById('topbarPlayIconSvg');
 
     function syncPlayState(isPlaying) {
       const pauseIcon = `<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>`;
@@ -4189,14 +4206,18 @@
       if (isPlaying) {
         playBtn?.classList.add('playing');
         mobilePlayBtn?.classList.add('playing');
+        topbarPlayBtn?.classList.add('playing');
         if (playSvg) playSvg.innerHTML = pauseIcon;
         if (mobilePlaySvg) mobilePlaySvg.innerHTML = pauseIcon;
+        if (topbarPlaySvg) topbarPlaySvg.innerHTML = pauseIcon;
         startVuAnimation();
       } else {
         playBtn?.classList.remove('playing');
         mobilePlayBtn?.classList.remove('playing');
+        topbarPlayBtn?.classList.remove('playing');
         if (playSvg) playSvg.innerHTML = playIcon;
         if (mobilePlaySvg) mobilePlaySvg.innerHTML = playIcon;
+        if (topbarPlaySvg) topbarPlaySvg.innerHTML = playIcon;
         stopVuAnimation();
       }
     }
@@ -4222,6 +4243,7 @@
 
     playBtn?.addEventListener('click', toggleAudioStream);
     mobilePlayBtn?.addEventListener('click', toggleAudioStream);
+    topbarPlayBtn?.addEventListener('click', toggleAudioStream);
 
     audioEl?.addEventListener('pause', () => syncPlayState(false));
     audioEl?.addEventListener('ended', () => syncPlayState(false));
@@ -4655,11 +4677,11 @@
   }
 
   function startVuAnimation() {
-    const containers = document.querySelectorAll('#vuMeterBars, #mobileVuMeterBars');
+    const containers = document.querySelectorAll('#vuMeterBars, #mobileVuMeterBars, #topbarVuMeterBars');
     containers.forEach(c => c.classList.add('active'));
     if (vuAnimationTimer) clearInterval(vuAnimationTimer);
     vuAnimationTimer = setInterval(() => {
-      document.querySelectorAll('#vuMeterBars .vu-bar, #mobileVuMeterBars .vu-bar').forEach(b => {
+      document.querySelectorAll('#vuMeterBars .vu-bar, #mobileVuMeterBars .vu-bar, #topbarVuMeterBars .vu-bar').forEach(b => {
         const h = Math.floor(4 + Math.random() * 14);
         b.style.height = `${h}px`;
       });
@@ -4668,10 +4690,10 @@
 
   function stopVuAnimation() {
     if (vuAnimationTimer) clearInterval(vuAnimationTimer);
-    document.querySelectorAll('#vuMeterBars, #mobileVuMeterBars').forEach(c => {
+    document.querySelectorAll('#vuMeterBars, #mobileVuMeterBars, #topbarVuMeterBars').forEach(c => {
       c.classList.remove('active');
     });
-    document.querySelectorAll('#vuMeterBars .vu-bar, #mobileVuMeterBars .vu-bar').forEach(b => {
+    document.querySelectorAll('#vuMeterBars .vu-bar, #mobileVuMeterBars .vu-bar, #topbarVuMeterBars .vu-bar').forEach(b => {
       b.style.height = '4px';
     });
   }

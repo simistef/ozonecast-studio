@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=32" />
+  <link rel="stylesheet" href="/index.css?v=33" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -46,6 +46,29 @@
             <span>•</span>
             <span id="streamFormatSpec" class="mono">320 kbps AAC+</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Topbar Compact On-Air Player (Landscape / Tablet / Duo) -->
+      <div class="topbar-mini-player" id="topbarMiniPlayer" aria-label="On-Air Live Stream Player">
+        <button type="button" class="mobile-play-btn topbar-play-btn" id="topbarPlayBtn" aria-label="Toggle live audio stream" title="Listen to live stream">
+          <svg id="topbarPlayIconSvg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 4 20 12 6 20 6 4"></polygon>
+          </svg>
+        </button>
+        <div class="topbar-player-meta">
+          <div class="topbar-player-topline">
+            <span class="mobile-onair-tag"><span class="pulse-dot-mini"></span> ON AIR</span>
+            <span class="mobile-player-mount mono" id="topbarPlayerMount">/listen</span>
+            <span class="mobile-player-listeners mono" id="topbarPlayerListeners">0 live</span>
+          </div>
+          <div class="topbar-player-track" id="topbarNowPlayingTitle">Connecting to stream metadata...</div>
+        </div>
+        <div class="mobile-vu-meter" id="topbarVuMeterBars" aria-hidden="true">
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
+          <div class="vu-bar"></div>
         </div>
       </div>
 
@@ -1366,6 +1389,6 @@
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
   <script src="/world-map.js?v=29"></script>
-  <script src="/app.js?v=29"></script>
+  <script src="/app.js?v=30"></script>
 </body>
 </html>
