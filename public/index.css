@@ -76,6 +76,8 @@ html, body {
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -2496,8 +2498,15 @@ button, input, select, textarea {
 
 /* Responsive 3-Column App Shell */
 @media (max-width: 1120px) {
+  .topbar {
+    position: static;
+  }
   .app-shell {
     grid-template-columns: 84px minmax(0, 1fr);
+  }
+  .side-nav {
+    top: 0;
+    height: 100vh;
   }
   .live-sidebar {
     grid-column: 1 / -1;
@@ -2538,6 +2547,11 @@ button, input, select, textarea {
 @media (max-width: 960px) {
   .radar-grid-2 {
     grid-template-columns: 1fr;
+  }
+  #daypartSummaryGrid,
+  #connectedTimeStatsStrip,
+  #retentionKpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
 
@@ -2672,7 +2686,6 @@ button, input, select, textarea {
   border-radius: 14px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
   padding: 8px 12px;
-  display: flex;
   align-items: center;
   gap: 10px;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
@@ -3254,9 +3267,19 @@ button, input, select, textarea {
 @media (horizontal-viewport-segments: 2),
        (screen-spanning: single-fold-vertical),
        (orientation: landscape) and (max-height: 520px) {
+  .topbar {
+    position: static !important;
+    padding-left: max(16px, env(safe-area-inset-left)) !important;
+    padding-right: max(16px, env(safe-area-inset-right)) !important;
+  }
+
   .app-shell {
-    grid-template-columns: 320px minmax(0, 1fr) !important;
-    gap: 14px !important;
+    grid-template-columns: 300px minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .side-nav {
+    display: none !important;
   }
 
   /* Left Screen / Pane: Stream Monitor & Telemetry Hub */
@@ -3265,8 +3288,8 @@ button, input, select, textarea {
     flex-direction: column !important;
     grid-column: 1 !important;
     position: sticky !important;
-    top: 60px !important;
-    max-height: calc(100vh - 66px) !important;
+    top: 10px !important;
+    max-height: calc(100vh - 64px) !important;
     overflow-y: auto !important;
     border-right: 1px solid var(--border-subtle) !important;
     border-left: none !important;
@@ -3277,9 +3300,9 @@ button, input, select, textarea {
   /* Right Screen / Pane: Workspace Content */
   .workspace {
     grid-column: 2 !important;
-    max-height: calc(100vh - 66px) !important;
-    overflow-y: auto !important;
-    padding: 10px 14px 60px !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    padding: 10px 14px 68px !important;
   }
 
   /* Hide mini player in duo landscape mode (full player is on left pane) */
@@ -3287,8 +3310,9 @@ button, input, select, textarea {
     display: none !important;
   }
 
-  /* Compact bottom nav in landscape */
+  /* Show compact bottom nav in landscape */
   .mobile-bottom-nav {
+    display: flex !important;
     height: calc(44px + max(2px, env(safe-area-inset-bottom))) !important;
     padding-bottom: max(2px, env(safe-area-inset-bottom)) !important;
   }
@@ -3300,11 +3324,6 @@ button, input, select, textarea {
   .mobile-tab-icon-wrap {
     width: 22px !important;
     height: 22px !important;
-  }
-
-  .topbar {
-    padding-left: max(16px, env(safe-area-inset-left)) !important;
-    padding-right: max(16px, env(safe-area-inset-right)) !important;
   }
 }
 
