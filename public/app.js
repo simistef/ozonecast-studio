@@ -1260,6 +1260,23 @@
     renderListeningTimeRadarChart(timeOfDay);
   }
 
+  function updateRadarTooltipPosition(tooltip, r, mx, my, curCx, curCy) {
+    const tw = tooltip.offsetWidth || 180;
+    const th = tooltip.offsetHeight || 80;
+
+    // Horizontal: if pointer is to the left of center, place tooltip to the right of cursor
+    let left = mx < curCx ? (mx + 16) : (mx - tw - 16);
+    // Vertical: if pointer is above center, place tooltip below cursor
+    let top = my < curCy ? (my + 16) : (my - th - 16);
+
+    // Keep cleanly within canvas boundaries
+    left = Math.max(10, Math.min(r.width - tw - 10, left));
+    top = Math.max(10, Math.min(r.height - th - 10, top));
+
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+  }
+
   let radarMetricMode = 'both';
 
   function renderTimeSlotsRadarChart(timeOfDay) {
@@ -1294,24 +1311,36 @@
     const gridColor = isLight ? 'rgba(15, 23, 42, 0.1)' : 'rgba(148, 163, 184, 0.14)';
     const labelColor = isLight ? '#475569' : '#94a3b8';
     const tickColor = isLight ? '#64748b' : '#94a3b8';
-    const tickBg = isLight ? 'rgba(255, 255, 255, 0.85)' : 'rgba(15, 23, 42, 0.85)';
+    const tickBg = isLight ? 'rgba(255, 255, 255, 0.88)' : 'rgba(15, 23, 42, 0.88)';
 
-    const cx = w / 2;
-    const cy = h / 2 + 4;
-    const radius = Math.min(w, h) * 0.34;
+    const cx = Math.floor(w / 2);
+    const cy = Math.floor(h / 2) + 10;
+    const radius = Math.floor(Math.min(w, h) * 0.30);
     const count = orderedDays.length; // 7
     const rings = 5;
 
     const listenersVals = orderedDays.map(d => Number(d.uniqueListeners || 0));
     const sessionsVals = orderedDays.map(d => Number(d.sessions || 0));
 
+    const maxListeners = Math.max(0, ...listenersVals);
+    const maxSessions = Math.max(0, ...sessionsVals);
+
+    const lisLegend = document.getElementById('radarListenersLegendLabel');
+    if (lisLegend) {
+      lisLegend.textContent = maxListeners > 0 ? `Unique Listeners (Peak: ${maxListeners})` : 'Unique Listeners';
+    }
+    const sesLegend = document.getElementById('radarSessionsLegendLabel');
+    if (sesLegend) {
+      sesLegend.textContent = maxSessions > 0 ? `Total Sessions (Peak: ${maxSessions})` : 'Total Sessions';
+    }
+
     let maxVal = 0;
     if (radarMetricMode === 'listeners') {
-      maxVal = Math.max(0, ...listenersVals);
+      maxVal = maxListeners;
     } else if (radarMetricMode === 'sessions') {
-      maxVal = Math.max(0, ...sessionsVals);
+      maxVal = maxSessions;
     } else {
-      maxVal = Math.max(0, ...listenersVals, ...sessionsVals);
+      maxVal = Math.max(0, maxListeners, maxSessions);
     }
     const scaleMax = maxVal > 0 ? Math.ceil(maxVal * 1.15) : 5;
 
@@ -1347,8 +1376,8 @@
       ctx.lineTo(ex, ey);
       ctx.stroke();
 
-      const lx = cx + Math.cos(a) * (radius + 22);
-      const ly = cy + Math.sin(a) * (radius + 18);
+      const lx = cx + Math.cos(a) * (radius + 24);
+      const ly = cy + Math.sin(a) * (radius + 20);
       const cosA = Math.cos(a);
       if (Math.abs(cosA) < 0.2) ctx.textAlign = 'center';
       else if (cosA > 0) ctx.textAlign = 'left';
@@ -1433,9 +1462,9 @@
         const mx = clientX - r.left;
         const my = clientY - r.top;
         const curCx = r.width / 2;
-        const curCy = r.height / 2 + 4;
+        const curCy = r.height / 2 + 10;
         const dist = Math.hypot(mx - curCx, my - curCy);
-        const curRad = Math.min(r.width, r.height) * 0.34;
+        const curRad = Math.min(r.width, r.height) * 0.30;
 
         if (dist > curRad + 35) {
           tooltip.classList.add('hidden');
@@ -1456,8 +1485,7 @@
           <div class="mono" style="font-size:11.5px;color:hsl(28,95%,56%)">Total Sessions: <strong>${dayObj.sessions || 0}</strong></div>
           <div class="mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">Avg Concurrent: ${dayObj.avgListeners || 0}</div>
         `;
-        tooltip.style.left = `${Math.min(r.width - 10, Math.max(10, mx))}px`;
-        tooltip.style.top = `${Math.max(40, my - 10)}px`;
+        updateRadarTooltipPosition(tooltip, r, mx, my, curCx, curCy);
         tooltip.classList.remove('hidden');
       };
 
@@ -1508,11 +1536,11 @@
     const gridColor = isLight ? 'rgba(15, 23, 42, 0.1)' : 'rgba(148, 163, 184, 0.14)';
     const labelColor = isLight ? '#475569' : '#94a3b8';
     const tickColor = isLight ? '#64748b' : '#94a3b8';
-    const tickBg = isLight ? 'rgba(255, 255, 255, 0.85)' : 'rgba(15, 23, 42, 0.85)';
+    const tickBg = isLight ? 'rgba(255, 255, 255, 0.88)' : 'rgba(15, 23, 42, 0.88)';
 
-    const cx = w / 2;
-    const cy = h / 2 + 4;
-    const radius = Math.min(w, h) * 0.34;
+    const cx = Math.floor(w / 2);
+    const cy = Math.floor(h / 2) + 10;
+    const radius = Math.floor(Math.min(w, h) * 0.30);
     const count = orderedDays.length; // 7
     const rings = 5;
 
@@ -1523,14 +1551,21 @@
     const maxTotalSec = Math.max(0, ...totalVals);
     const hasData = maxAvgSec > 0 || maxTotalSec > 0;
 
-    // Update legend peak labels
+    // Apply 15% headroom so maximum points stay gracefully inside the outer heptagon (~87%), exactly matching Radar 1
+    const scaleMaxAvg = maxAvgSec > 0 ? Math.ceil(maxAvgSec * 1.15) : 300;
+    const maxHours = maxTotalSec / 3600;
+    const scaleMaxHours = maxHours > 0 ? (Math.ceil(maxHours * 1.15 * 10) / 10) : 5;
+    const scaleMaxTotal = scaleMaxHours * 3600;
+
+    // Update legend peak badges
     const avgLegend = document.getElementById('radarAvgTimeLegendLabel');
     if (avgLegend) {
-      avgLegend.textContent = maxAvgSec > 0 ? `Average Stay (${formatDurationNoSeconds(maxAvgSec)})` : 'Average Stay';
+      avgLegend.textContent = maxAvgSec > 0 ? `Average Stay (Peak: ${formatDurationNoSeconds(maxAvgSec)})` : 'Average Stay';
     }
     const totalLegend = document.getElementById('radarTotalTimeLegendLabel');
     if (totalLegend) {
-      totalLegend.textContent = maxTotalSec > 0 ? `Total Listening Time (${(maxTotalSec / 3600).toFixed(1)}h)` : 'Total Listening Time';
+      const peakHoursStr = scaleMaxHours >= 10 ? Math.round(maxHours) : maxHours.toFixed(1);
+      totalLegend.textContent = maxTotalSec > 0 ? `Total Listening Time (Peak: ${peakHoursStr}h)` : 'Total Listening Time';
     }
 
     const angleFor = idx => -Math.PI / 2 + (idx * 2 * Math.PI) / count;
@@ -1565,8 +1600,8 @@
       ctx.lineTo(ex, ey);
       ctx.stroke();
 
-      const lx = cx + Math.cos(a) * (radius + 22);
-      const ly = cy + Math.sin(a) * (radius + 18);
+      const lx = cx + Math.cos(a) * (radius + 24);
+      const ly = cy + Math.sin(a) * (radius + 20);
       const cosA = Math.cos(a);
       if (Math.abs(cosA) < 0.2) ctx.textAlign = 'center';
       else if (cosA > 0) ctx.textAlign = 'left';
@@ -1576,15 +1611,14 @@
       ctx.fillText(orderedDays[i].name, lx, ly);
     }
 
-    // Scale tick labels along top Sunday axis
-    ctx.font = '500 10.5px "JetBrains Mono", monospace';
+    // Scale tick labels along top Sunday axis with real time units
+    ctx.font = '500 10px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     if (radarTimeMetricMode === 'average') {
-      const scaleMax = maxAvgSec > 0 ? Math.ceil(maxAvgSec * 1.15) : 300;
       for (let r = 1; r <= rings; r++) {
-        const val = Math.round((scaleMax * r) / rings);
+        const val = Math.round((scaleMaxAvg * r) / rings);
         const ty = cy - (radius * r) / rings;
         const txt = formatDurationNoSeconds(val);
         const tw = ctx.measureText(txt).width + 6;
@@ -1594,8 +1628,6 @@
         ctx.fillText(txt, cx, ty);
       }
     } else if (radarTimeMetricMode === 'total') {
-      const maxHours = maxTotalSec / 3600;
-      const scaleMaxHours = maxHours > 0 ? Math.ceil(maxHours * 1.15) : 5;
       for (let r = 1; r <= rings; r++) {
         const val = (scaleMaxHours * r) / rings;
         const ty = cy - (radius * r) / rings;
@@ -1607,12 +1639,15 @@
         ctx.fillText(txt, cx, ty);
       }
     } else {
-      // Both mode: relative % of peak
+      // Both mode: dual ticks showing both average duration and total hours along the axis
       for (let r = 1; r <= rings; r++) {
-        const pct = Math.round((r * 100) / rings);
+        const avgVal = Math.round((scaleMaxAvg * r) / rings);
+        const totVal = (scaleMaxHours * r) / rings;
+        const avgStr = formatDurationNoSeconds(avgVal);
+        const totStr = `${totVal >= 10 ? Math.round(totVal) : totVal.toFixed(1).replace('.0', '')}h`;
+        const txt = `${avgStr} · ${totStr}`;
         const ty = cy - (radius * r) / rings;
-        const txt = `${pct}%`;
-        const tw = ctx.measureText(txt).width + 6;
+        const tw = ctx.measureText(txt).width + 8;
         ctx.fillStyle = tickBg;
         ctx.fillRect(cx - tw / 2, ty - 7, tw, 14);
         ctx.fillStyle = tickColor;
@@ -1661,17 +1696,11 @@
       ctx.fillText('No duration data recorded yet', cx, cy);
     } else {
       if (radarTimeMetricMode === 'both' || radarTimeMetricMode === 'total') {
-        const scaleMaxSec = radarTimeMetricMode === 'total'
-          ? (Math.ceil((maxTotalSec / 3600) * 1.15) * 3600 || 3600)
-          : (maxTotalSec || 1);
-        const totalRatios = totalVals.map(v => (scaleMaxSec > 0 ? v / scaleMaxSec : 0));
+        const totalRatios = totalVals.map(v => (scaleMaxTotal > 0 ? v / scaleMaxTotal : 0));
         drawSeriesWithRatios(totalRatios, 'hsl(268, 88%, 62%)', 'hsla(268, 88%, 62%, 0.20)');
       }
       if (radarTimeMetricMode === 'both' || radarTimeMetricMode === 'average') {
-        const scaleMaxSec = radarTimeMetricMode === 'average'
-          ? (Math.ceil(maxAvgSec * 1.15) || 300)
-          : (maxAvgSec || 1);
-        const avgRatios = avgVals.map(v => (scaleMaxSec > 0 ? v / scaleMaxSec : 0));
+        const avgRatios = avgVals.map(v => (scaleMaxAvg > 0 ? v / scaleMaxAvg : 0));
         drawSeriesWithRatios(avgRatios, 'hsl(158, 85%, 44%)', 'hsla(158, 85%, 44%, 0.22)');
       }
     }
@@ -1688,9 +1717,9 @@
         const mx = clientX - r.left;
         const my = clientY - r.top;
         const curCx = r.width / 2;
-        const curCy = r.height / 2 + 4;
+        const curCy = r.height / 2 + 10;
         const dist = Math.hypot(mx - curCx, my - curCy);
-        const curRad = Math.min(r.width, r.height) * 0.34;
+        const curRad = Math.min(r.width, r.height) * 0.30;
 
         if (dist > curRad + 35) {
           tooltip.classList.add('hidden');
@@ -1715,8 +1744,7 @@
           <div class="mono" style="font-size:11.5px;color:hsl(268,88%,62%)">Total Time: <strong>${formatDurationNoSeconds(totalSec)}</strong> (${totalHours}h)</div>
           <div class="mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">Sessions: ${dayObj.sessions || 0} • Listeners: ${dayObj.uniqueListeners || 0}</div>
         `;
-        tooltip.style.left = `${Math.min(r.width - 10, Math.max(10, mx))}px`;
-        tooltip.style.top = `${Math.max(40, my - 10)}px`;
+        updateRadarTooltipPosition(tooltip, r, mx, my, curCx, curCy);
         tooltip.classList.remove('hidden');
       };
 

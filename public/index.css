@@ -2538,6 +2538,37 @@ button, input, select, textarea {
   box-shadow: 0 0 6px hsla(268, 88%, 62%, 0.5);
 }
 
+.radar-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: hsla(214, 28%, 9%, 0.96);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  z-index: 25;
+  min-width: 160px;
+  max-width: 240px;
+  transition: opacity 0.12s ease;
+  backdrop-filter: blur(8px);
+  transform: none;
+  margin: 0;
+}
+
+[data-theme="light"] .radar-tooltip {
+  background: hsla(0, 0%, 100%, 0.98);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15);
+}
+
+.radar-tooltip.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ==============================================================================
    iPhone Duo & Mobile-Optimized Broadcast Architecture
    ============================================================================== */
@@ -3131,7 +3162,7 @@ button, input, select, textarea {
 
   /* Radar Chart */
   .radar-canvas-wrap {
-    height: 290px !important;
+    height: 330px !important;
   }
 }
 

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/index.css?v=28" />
+  <link rel="stylesheet" href="/index.css?v=29" />
 </head>
 <body>
   <!-- Top Broadcast Telemetry Bar (Sticky) -->
@@ -680,11 +680,11 @@
             <div class="radar-layout">
               <div class="radar-canvas-wrap">
                 <canvas id="timeSlotsRadarCanvas"></canvas>
-                <div id="radarTooltip" class="chart-tooltip hidden"></div>
+                <div id="radarTooltip" class="radar-tooltip hidden"></div>
               </div>
               <div class="radar-legend-row">
-                <span class="radar-legend-item"><span class="radar-dot listeners"></span> Unique Listeners</span>
-                <span class="radar-legend-item"><span class="radar-dot sessions"></span> Total Sessions</span>
+                <span class="radar-legend-item"><span class="radar-dot listeners"></span> <span id="radarListenersLegendLabel">Unique Listeners</span></span>
+                <span class="radar-legend-item"><span class="radar-dot sessions"></span> <span id="radarSessionsLegendLabel">Total Sessions</span></span>
               </div>
             </div>
           </div>
@@ -710,7 +710,7 @@
             <div class="radar-layout">
               <div class="radar-canvas-wrap">
                 <canvas id="timeSlotsTimeRadarCanvas"></canvas>
-                <div id="radarTimeTooltip" class="chart-tooltip hidden"></div>
+                <div id="radarTimeTooltip" class="radar-tooltip hidden"></div>
               </div>
               <div class="radar-legend-row">
                 <span class="radar-legend-item"><span class="radar-dot avg-time"></span> <span id="radarAvgTimeLegendLabel">Average Stay</span></span>
@@ -1290,7 +1290,7 @@
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="/world-map.js?v=28"></script>
-  <script src="/app.js?v=28"></script>
+  <script src="/world-map.js?v=29"></script>
+  <script src="/app.js?v=29"></script>
 </body>
 </html>
