@@ -18,6 +18,7 @@ const {
   getIpHistory,
   getIpAliasesMap,
   setIpAlias,
+  getAdminIpsSet,
   getBotIpsSet,
   isBotIp,
   setBotIp,
@@ -133,6 +134,7 @@ function enrichListeners(rawListeners, mount = '/listen') {
     ipCounts.set(item.ip, (ipCounts.get(item.ip) || 0) + 1);
   }
   const botIps = getBotIpsSet();
+  const adminIps = getAdminIpsSet();
 
   return rawListeners
     .map((item, idx) => {
@@ -148,6 +150,7 @@ function enrichListeners(rawListeners, mount = '/listen') {
         };
       }
       const geo = lookupIp(item.ip);
+      const isAdmin = adminIps.has(geo.ip) || adminIps.has(item.ip);
       return {
         clientId: String(item.clientId || `${item.ip}-${idx}`),
         ip: geo.ip,
@@ -158,6 +161,7 @@ function enrichListeners(rawListeners, mount = '/listen') {
         connectionsFromIp: ipCounts.get(item.ip) || 1,
         isBot,
         isManualBot,
+        isAdmin,
         ua,
         geo,
       };
@@ -453,9 +457,10 @@ app.get('/api/dashboard', async (req, res) => {
     const modeForHistory = latestState.activeSourceMode === 'imported' ? 'live' : latestState.activeSourceMode;
     const config = getConfig();
     const ipAliases = getIpAliasesMap();
+    const adminIps = getAdminIpsSet();
 
     const allListeners = latestState.listeners || [];
-    const humanListeners = allListeners.filter(l => !l.isBot);
+    const humanListeners = allListeners.filter(l => !l.isBot && !l.isAdmin && !adminIps.has(l.ip));
     const botListeners = allListeners.filter(l => l.isBot);
 
     // Deduplicate human listeners by device/player:

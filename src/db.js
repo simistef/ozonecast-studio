@@ -168,6 +168,27 @@ try {
   }
 } catch (_) {}
 
+const ADMIN_IP_SUBQUERY = `
+  SELECT ip FROM ip_aliases
+  WHERE LOWER(TRIM(friendly_name)) = 'me'
+     OR LOWER(friendly_name) LIKE 'me %'
+     OR LOWER(friendly_name) LIKE 'me-%'
+     OR LOWER(friendly_name) LIKE 'me -%'
+     OR LOWER(friendly_name) LIKE '%(me)%'
+     OR LOWER(TRIM(friendly_name)) = 'admin'
+     OR LOWER(TRIM(friendly_name)) = 'station admin'
+     OR LOWER(notes) LIKE '%me%'
+`;
+
+function getAdminIpsSet() {
+  try {
+    const rows = db.prepare(ADMIN_IP_SUBQUERY).all();
+    return new Set(rows.map(r => r.ip));
+  } catch (_) {
+    return new Set();
+  }
+}
+
 const DEFAULT_CONFIG = {
   baseUrl: process.env.ICECAST_URL || 'https://live.ozone.fm:8443',
   mount: process.env.ICECAST_MOUNT || '/listen',
@@ -362,12 +383,13 @@ function recordPollResult({
   lastTrack,
 }) {
   const now = Date.now();
-  const uniqueIps = new Set(enrichedListeners.map(l => l.ip)).size;
-  const humanListeners = enrichedListeners.filter(l => !l.isBot);
+  const nonAdminListeners = enrichedListeners.filter(l => !l.isAdmin);
+  const uniqueIps = new Set(nonAdminListeners.map(l => l.ip)).size;
+  const humanListeners = nonAdminListeners.filter(l => !l.isBot);
 
   // Deduplicate listeners by (IP + Player / User-Agent):
   // Same IP and player/agent count as 1 listener, unless separate players/agents.
-  const deduplicatedListeners = deduplicateListenersByDevice(enrichedListeners);
+  const deduplicatedListeners = deduplicateListenersByDevice(nonAdminListeners);
   const deduplicatedHumanListeners = deduplicateListenersByDevice(humanListeners);
 
   const listenerCount = deduplicatedListeners.length;
@@ -790,6 +812,7 @@ function getTimeOfDayProfile(sourceMode = 'live', excludeBots = false, dayFilter
         AND LOWER(user_agent) NOT LIKE '%streamripper%'
       `;
     }
+    sessionQuery += ` AND ip NOT IN (${ADMIN_IP_SUBQUERY})`;
     const sRows = db.prepare(sessionQuery).all(...params);
     for (const s of sRows) {
       const dur = s.duration_seconds || 0;
@@ -969,6 +992,7 @@ function getHistoricalBreakdowns(rangeMinutes = 1440, sourceMode = null, exclude
     LEFT JOIN ip_aliases fn ON ls.ip = fn.ip
     WHERE (ls.last_seen >= ? OR ? = 0)
       AND (? IS NULL OR ls.source_mode = ?)
+      AND ls.ip NOT IN (${ADMIN_IP_SUBQUERY})
       AND (? = 0 OR (
         ls.category != 'Bot / Ripper'
         AND ls.ip NOT IN (SELECT ip FROM bot_ips)
@@ -1584,6 +1608,7 @@ function getTopReturningListeners(limit = 5, sourceMode = 'live', sortBy = 'tota
         MAX(country_name) as country_name
       FROM listener_sessions
       WHERE source_mode = ?
+        AND ip NOT IN (${ADMIN_IP_SUBQUERY})
         AND (? = 0 OR (
           category != 'Bot / Ripper'
           AND ip NOT IN (SELECT ip FROM bot_ips)
@@ -1642,6 +1667,7 @@ function getListenersHistoricalSummary(sourceMode = 'live') {
         ) as all_time_rank
       FROM listener_sessions
       WHERE source_mode = ?
+        AND ip NOT IN (${ADMIN_IP_SUBQUERY})
         AND (category != 'Bot / Ripper' AND ip NOT IN (SELECT ip FROM bot_ips))
       GROUP BY ip
     `).all(sourceMode);
@@ -1695,6 +1721,7 @@ function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
         SUM(duration_seconds) as total_listening_sec
       FROM listener_sessions
       WHERE last_seen >= ? AND source_mode = ?
+        AND ip NOT IN (${ADMIN_IP_SUBQUERY})
         AND (? = 0 OR (
           category != 'Bot / Ripper'
           AND ip NOT IN (SELECT ip FROM bot_ips)
@@ -1714,6 +1741,7 @@ function getAggregatedStats(sourceMode = 'live', excludeBots = false) {
         SELECT ip
         FROM listener_sessions
         WHERE source_mode = ?
+          AND ip NOT IN (${ADMIN_IP_SUBQUERY})
           AND (? = 0 OR (
             category != 'Bot / Ripper'
             AND ip NOT IN (SELECT ip FROM bot_ips)
@@ -2300,6 +2328,7 @@ module.exports = {
   getIpAliasesMap,
   getIpAlias,
   setIpAlias,
+  getAdminIpsSet,
   getBotIpsSet,
   isBotIp,
   setBotIp,
