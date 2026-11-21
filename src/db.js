@@ -2397,14 +2397,30 @@ function getNewListenerRetentionSummary(rangeMinutes = 1440, sourceMode = null) 
     let attractedCount = 0;
     let returningCount = 0;
     let oneOffCount = 0;
+    let risingSuperfanCount = 0;
     let activeCount = 0;
 
     const listeners = rows.map(r => {
       const sessionCount = Number(r.session_count) || 1;
       const totalDurationSec = Number(r.total_duration_seconds) || 0;
       const longestSessionSec = Number(r.longest_session_seconds) || 0;
+      const firstSeenTs = Number(r.first_seen) || 0;
       const isActive = Number(r.is_active) === 1;
       if (isActive) activeCount++;
+
+      const daysSinceFirstSeen = firstSeenTs > 0 ? Math.max(0.25, (now - firstSeenTs) / (24 * 3600 * 1000)) : 999;
+      const avgDailyListeningSec = totalDurationSec / daysSinceFirstSeen;
+      const isRecentlyDiscovered = firstSeenTs > 0 && (now - firstSeenTs) <= 7 * 24 * 3600 * 1000;
+      const isRisingSuperfan = isRecentlyDiscovered && (
+        totalDurationSec >= 3 * 3600 ||
+        (totalDurationSec >= 2 * 3600 && avgDailyListeningSec >= 5400) ||
+        (sessionCount >= 2 && (totalDurationSec / sessionCount) >= 3600 && totalDurationSec >= 7200)
+      );
+      if (isRisingSuperfan) risingSuperfanCount++;
+      const daysLabel = daysSinceFirstSeen < 1 ? 'today' : `${Math.max(1, Math.round(daysSinceFirstSeen))}d ago`;
+      const risingTooltip = isRisingSuperfan
+        ? `Just discovered the station (${daysLabel}) & listening heavily (${Math.round(totalDurationSec / 60)}m across ${sessionCount} ${sessionCount === 1 ? 'visit' : 'visits'})`
+        : '';
 
       let status = 'exploring';
       let statusLabel = '🔍 Exploring';
@@ -2445,10 +2461,12 @@ function getNewListenerRetentionSummary(rangeMinutes = 1440, sourceMode = null) 
         statusLabel,
         statusClass,
         statusTooltip,
+        isRisingSuperfan,
+        risingTooltip,
         sessionCount,
         totalDurationSeconds: totalDurationSec,
         longestSessionSeconds: longestSessionSec,
-        firstSeen: Number(r.first_seen) || 0,
+        firstSeen: firstSeenTs,
         lastSeen: Number(r.last_seen) || 0,
         isActive,
         city: r.city || '',
@@ -2471,6 +2489,7 @@ function getNewListenerRetentionSummary(rangeMinutes = 1440, sourceMode = null) 
       attractedCount,
       returningCount,
       oneOffCount,
+      risingSuperfanCount,
       activeCount,
       attractionRate,
       returnRate,

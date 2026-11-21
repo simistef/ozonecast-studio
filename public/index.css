@@ -1725,7 +1725,15 @@ button, input, select, textarea {
   border: 1px solid hsla(215, 20%, 65%, 0.35);
 }
 
-/* 3. Marathon / Superfan */
+/* 3. Marathon / Superfan / Rising Superfan */
+.listener-badge.badge-rising {
+  background: linear-gradient(135deg, hsla(16, 100%, 56%, 0.22), hsla(338, 92%, 60%, 0.22));
+  color: hsl(16, 100%, 82%);
+  border: 1px solid hsla(16, 98%, 58%, 0.5);
+  box-shadow: 0 0 8px hsla(16, 100%, 55%, 0.22);
+  font-weight: 700;
+}
+
 .listener-badge.badge-marathon {
   background: hsla(28, 95%, 56%, 0.16);
   color: hsl(28, 100%, 78%);
@@ -1793,6 +1801,12 @@ button, input, select, textarea {
   background: hsla(215, 20%, 50%, 0.12);
   color: hsl(215, 20%, 30%);
   border-color: hsla(215, 20%, 50%, 0.32);
+}
+[data-theme="light"] .listener-badge.badge-rising {
+  background: linear-gradient(135deg, hsla(16, 95%, 48%, 0.14), hsla(338, 90%, 50%, 0.14));
+  color: hsl(12, 90%, 34%);
+  border-color: hsla(16, 90%, 45%, 0.42);
+  box-shadow: 0 1px 3px rgba(210, 60, 20, 0.12);
 }
 [data-theme="light"] .listener-badge.badge-marathon {
   background: hsla(25, 95%, 45%, 0.12);

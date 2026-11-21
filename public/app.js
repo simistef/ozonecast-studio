@@ -276,6 +276,33 @@
       }
     }
 
+    // 4.5. Rising Superfan / Recently Discovered & Heavy Listening Badge
+    // Listeners who first discovered the station recently (within the last 7 days)
+    // and have already accumulated heavy listening time (>= 3 hours total, or >= 1.5h/day with >= 2h total).
+    const nowTs = Date.now();
+    const daysSinceFirstSeen = firstSeen > 0 ? Math.max(0.25, (nowTs - firstSeen) / (24 * 3600 * 1000)) : 999;
+    const avgDailyListeningSec = totalDuration / daysSinceFirstSeen;
+    const isRecentlyDiscovered = firstSeen > 0 && (nowTs - firstSeen) <= 7 * 24 * 3600 * 1000;
+    const isHeavyRecentListener = isRecentlyDiscovered && (
+      totalDuration >= 3 * 3600 ||
+      (totalDuration >= 2 * 3600 && avgDailyListeningSec >= 5400) ||
+      (sessionCount >= 2 && (totalDuration / sessionCount) >= 3600 && totalDuration >= 7200)
+    );
+    if (isHeavyRecentListener) {
+      const daysLabel = daysSinceFirstSeen < 1
+        ? 'today'
+        : `${Math.max(1, Math.round(daysSinceFirstSeen))}d ago`;
+      badges.push({
+        id: 'rising',
+        type: 'rising',
+        group: 'new',
+        label: '🔥 Rising Superfan',
+        shortLabel: '🔥 Rising Fan',
+        className: 'badge-rising',
+        tooltip: `Just discovered the station (${daysLabel}) & listening heavily • ${formatDurationHuman(totalDuration)} across ${sessionCount} ${sessionCount === 1 ? 'visit' : 'visits'}`
+      });
+    }
+
     // 5. Marathon Listening Badges (strictly above station average & >= 2h)
     const stationAvgSec = Number(dashboardState?.kpis?.avgSessionDurationSec) || 600;
     const effectiveLiveSec = Math.max(liveConnectedSeconds, listener.connectedSeconds || 0);
@@ -1852,14 +1879,19 @@
           const activeDot = l.isActive ? '<span class="status-dot online" style="width:7px;height:7px;display:inline-block;border-radius:50%;background:var(--accent-emerald);margin-right:4px" title="Active live stream connection"></span>' : '';
           const namePart = l.friendlyName ? `<span style="font-weight:600;color:var(--text-primary)">${escapeHtml(l.friendlyName)}</span> <span class="mono" style="font-size:11px;color:var(--text-muted)">(${escapeHtml(l.ip)})</span>` : `<span class="mono" style="font-weight:600">${escapeHtml(l.ip)}</span>`;
 
+          const risingTag = l.isRisingSuperfan
+            ? `<span class="listener-badge badge-rising" title="${escapeHtml(l.risingTooltip || 'Just discovered the station & listening heavily')}">🔥 Rising Superfan</span>`
+            : '';
+
           return `
             <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-              <div style="display:flex;align-items:center;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 ${activeDot}
                 <button type="button" class="btn-dossier" data-ip="${escapeHtml(l.ip)}" style="background:none;border:none;padding:0;cursor:pointer;color:inherit;text-align:left">
                   ${namePart}
                 </button>
                 <span class="listener-badge ${escapeHtml(l.statusClass)}" title="${escapeHtml(l.statusTooltip || '')}">${escapeHtml(l.statusLabel)}</span>
+                ${risingTag}
               </div>
               <div style="display:flex;align-items:center;gap:14px;font-size:11.5px">
                 <span style="color:var(--text-secondary)">${flag} ${loc}</span>
@@ -1943,7 +1975,7 @@
                   ${renderCountryFlag(item.countryCode, item.countryName, 18)}
                   <span style="font-weight:500">${locLabel}</span>
                   ${statusBadge}
-                  ${renderListenerBadgesHtml(itemBadges, 2)}
+                  ${renderListenerBadgesHtml(itemBadges, 3)}
                 </div>
                 <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">
                   ${escapeHtml(item.player)} (${escapeHtml(item.os)}) • Avg visit: <span class="mono">${formatDurationHuman(item.avgDurationSeconds)}</span>
@@ -3334,7 +3366,7 @@
             <span style="font-size:11.5px;color:var(--accent-amber);font-weight:600">${sum.all_time_rank ? `🌟 Rank #${sum.all_time_rank} Station-Wide` : 'Station Visitor'}</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            ${renderListenerBadgesHtml(dossierBadges, 3)}
+            ${renderListenerBadgesHtml(dossierBadges, 5)}
           </div>
         </div>
 
