@@ -1688,7 +1688,15 @@ function getListenersHistoricalSummary(sourceMode = 'live') {
       FROM listener_sessions
       WHERE source_mode = ?
         AND ip NOT IN (${ADMIN_IP_SUBQUERY})
-        AND (category != 'Bot / Ripper' AND ip NOT IN (SELECT ip FROM bot_ips))
+        AND (
+          category != 'Bot / Ripper'
+          AND ip NOT IN (SELECT ip FROM bot_ips)
+          AND LOWER(user_agent) NOT LIKE '%bot%'
+          AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+          AND LOWER(user_agent) NOT LIKE '%crawler%'
+          AND LOWER(user_agent) NOT LIKE '%spider%'
+          AND LOWER(user_agent) NOT LIKE '%streamripper%'
+        )
       GROUP BY ip
     `).all(sourceMode);
 
@@ -1879,7 +1887,7 @@ function findTrackStartTs(trackName, exitTs) {
   return earliest;
 }
 
-function getIpHistory(ip) {
+function getIpHistory(ip, sourceMode = 'live') {
   const sessions = db
     .prepare('SELECT * FROM listener_sessions WHERE ip = ? ORDER BY last_seen DESC LIMIT 50')
     .all(ip);
@@ -1930,10 +1938,20 @@ function getIpHistory(ip) {
             ORDER BY SUM(duration_seconds) DESC, COUNT(*) DESC
           ) as rank
         FROM listener_sessions
-        WHERE category != 'Bot / Ripper' AND ip NOT IN (SELECT ip FROM bot_ips)
+        WHERE source_mode = ?
+          AND ip NOT IN (${ADMIN_IP_SUBQUERY})
+          AND (
+            category != 'Bot / Ripper'
+            AND ip NOT IN (SELECT ip FROM bot_ips)
+            AND LOWER(user_agent) NOT LIKE '%bot%'
+            AND LOWER(user_agent) NOT LIKE '%onlineradiobox%'
+            AND LOWER(user_agent) NOT LIKE '%crawler%'
+            AND LOWER(user_agent) NOT LIKE '%spider%'
+            AND LOWER(user_agent) NOT LIKE '%streamripper%'
+          )
         GROUP BY ip
       ) WHERE ip = ?
-    `).get(ip);
+    `).get(sourceMode, ip);
     if (rankRow && rankRow.rank) {
       allTimeRank = Number(rankRow.rank);
     }

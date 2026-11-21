@@ -749,7 +749,8 @@ app.get('/api/ip/:ip', async (req, res) => {
   try {
     const rawIp = req.params.ip;
     const geo = await resolveIpHighAccuracy(rawIp, 1500);
-    const history = getIpHistory(geo.ip);
+    const modeForHistory = latestState.activeSourceMode === 'imported' ? 'live' : (latestState.activeSourceMode || 'live');
+    const history = getIpHistory(geo.ip, modeForHistory);
     const activeMatches = (latestState.listeners || []).filter(l => l.ip === geo.ip);
     const currentTrackProgressSec = latestState.sourceMeta?.title
       ? Math.max(0, Math.floor((Date.now() - trackStartTs) / 1000))
